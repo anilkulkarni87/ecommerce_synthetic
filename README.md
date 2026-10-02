@@ -35,8 +35,8 @@ A realistic, referentially-intact omnichannel synthetic ecommerce data generator
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/Ecommerce_synthetic.git
-cd Ecommerce_synthetic
+git clone https://github.com/anilkulkarni87/ecommerce_synthetic.git
+cd ecommerce_synthetic
 
 # Create and activate virtual environment
 python3 -m venv .venv
