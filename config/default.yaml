@@ -1,0 +1,183 @@
+# Default generation configuration
+
+# Date range for generated data
+date_range:
+  start: "2022-10-01"
+  end: "2024-09-30"
+
+# Fixed dimension sizes (don't scale with tier)
+product_count: 2000
+store_count: 50
+
+# Fraud injection
+fraud_rate: 0.02  # 2% of orders flagged
+
+# Personas and their distribution (must sum to ~1.0 excluding fraudster)
+personas:
+  power_shopper:
+    share: 0.05
+    orders_per_year: [15, 25]
+    loyalty_tier: ["Platinum", "Gold"]
+    email_open_rate: 0.45
+    email_click_rate: 0.12
+    browse_to_buy: 0.10
+    avg_cart_items: [3, 7]
+    preferred_categories: null  # shops broadly
+    return_rate: 0.03
+    review_rate: 0.25
+
+  regular:
+    share: 0.25
+    orders_per_year: [4, 8]
+    loyalty_tier: ["Silver", "Gold"]
+    email_open_rate: 0.25
+    email_click_rate: 0.05
+    browse_to_buy: 0.04
+    avg_cart_items: [2, 4]
+    preferred_categories: 2  # sticks to 2 categories
+    return_rate: 0.05
+    review_rate: 0.15
+
+  occasional:
+    share: 0.40
+    orders_per_year: [1, 3]
+    loyalty_tier: ["Bronze", "Silver"]
+    email_open_rate: 0.18
+    email_click_rate: 0.03
+    browse_to_buy: 0.02
+    avg_cart_items: [1, 3]
+    preferred_categories: 1
+    return_rate: 0.08
+    review_rate: 0.08
+
+  bargain_hunter:
+    share: 0.15
+    orders_per_year: [3, 6]
+    loyalty_tier: ["Bronze"]
+    email_open_rate: 0.35
+    email_click_rate: 0.08
+    browse_to_buy: 0.04
+    avg_cart_items: [2, 5]
+    preferred_categories: null  # shops deals across categories
+    return_rate: 0.12
+    review_rate: 0.05
+    always_uses_coupon: true
+
+  one_and_done:
+    share: 0.10
+    orders_per_year: [1, 1]
+    loyalty_tier: null
+    email_open_rate: 0.10
+    email_click_rate: 0.01
+    browse_to_buy: 0.005
+    avg_cart_items: [1, 2]
+    preferred_categories: 1
+    return_rate: 0.15
+    review_rate: 0.02
+
+  window_shopper:
+    share: 0.05
+    orders_per_year: [0, 0]
+    loyalty_tier: null
+    email_open_rate: 0.08
+    email_click_rate: 0.005
+    browse_to_buy: 0.0
+    avg_cart_items: [0, 0]
+    preferred_categories: null
+    return_rate: 0.0
+    review_rate: 0.0
+
+# Omnichannel overlap
+omnichannel_rate: 0.30  # 30% have both online + instore accounts
+
+# Seasonality multipliers (month index 1-12)
+seasonality:
+  1: 0.85   # January - post-holiday dip
+  2: 0.80   # February - low
+  3: 0.90   # March - spring
+  4: 0.95   # April
+  5: 1.00   # May
+  6: 1.10   # June - summer sales
+  7: 1.05   # July
+  8: 1.15   # August - back to school
+  9: 1.10   # September
+  10: 1.00  # October
+  11: 1.40  # November - Black Friday
+  12: 1.50  # December - holiday
+
+# Email campaign settings
+email:
+  delivery_rate: 0.98
+  campaigns_per_month: 5
+  types:
+    - promotional
+    - transactional
+    - welcome
+    - abandoned_cart
+    - re_engagement
+    - newsletter
+
+# Product categories and realistic subcategories
+categories:
+  Electronics:
+    subcategories: [Laptops, Smartphones, Tablets, Headphones, Speakers, Smart Home, Cameras, Gaming Consoles, Wearables, Chargers & Cables]
+    price_range: [15.99, 2499.99]
+    brands: [TechVista, NovaPulse, QuantumEdge, ClearView, ByteForce, NexGen, PrimeWave, DigitalCore]
+    weight_range: [0.1, 5.0]
+
+  Apparel:
+    subcategories: [T-Shirts, Jeans, Dresses, Jackets, Activewear, Underwear, Socks, Shoes, Accessories, Formal Wear]
+    price_range: [9.99, 399.99]
+    brands: [UrbanThread, StyleCraft, PeakWear, ComfortLine, VelvetEdge, AeroFit, ClassicCut, TrendSet]
+    weight_range: [0.1, 2.0]
+
+  Home & Kitchen:
+    subcategories: [Bedding, Cookware, Small Appliances, Storage, Decor, Cleaning, Bath, Furniture, Lighting, Tableware]
+    price_range: [7.99, 899.99]
+    brands: [HomeNest, PureLiving, KitchenPro, CozySpace, BrightHome, ArtisanCraft, ModernHaus, ComfortZone]
+    weight_range: [0.2, 25.0]
+
+  Beauty & Personal Care:
+    subcategories: [Skincare, Haircare, Makeup, Fragrances, Nail Care, Men's Grooming, Bath & Body, Tools & Brushes, Sun Care, Oral Care]
+    price_range: [4.99, 199.99]
+    brands: [GlowEssence, PureRadiance, VelvetSkin, FreshBloom, LuxeBeauty, NaturalGlow, DermaElite, SilkTouch]
+    weight_range: [0.05, 1.0]
+
+  Sports & Outdoors:
+    subcategories: [Running, Yoga, Cycling, Camping, Swimming, Team Sports, Hiking, Fishing, Winter Sports, Fitness Equipment]
+    price_range: [9.99, 599.99]
+    brands: [PeakMotion, TrailBlazer, AquaForce, FlexFit, SummitGear, PowerStride, WildPath, EnduroPro]
+    weight_range: [0.1, 15.0]
+
+  Grocery & Gourmet:
+    subcategories: [Snacks, Beverages, Coffee & Tea, Condiments, Baking, Organic, International, Canned Goods, Breakfast, Supplements]
+    price_range: [2.99, 79.99]
+    brands: [FreshHarvest, GourmetSelect, PureEarth, TasteQuest, NutriBlend, ArtisanBites, GreenMeadow, SpiceTrail]
+    weight_range: [0.1, 5.0]
+
+# Tax rates by state (simplified)
+tax_rates:
+  default: 0.07
+  OR: 0.0
+  MT: 0.0
+  NH: 0.0
+  DE: 0.0
+  AK: 0.0
+  CA: 0.0725
+  NY: 0.08
+  TX: 0.0625
+  FL: 0.06
+  WA: 0.065
+  TN: 0.07
+  IL: 0.0625
+
+# Shipping cost tiers
+shipping:
+  free_threshold: 75.00  # Free shipping above this amount
+  rates:
+    standard: [4.99, 7.99]
+    express: [12.99, 19.99]
+    overnight: [24.99, 39.99]
+  standard_pct: 0.65
+  express_pct: 0.25
+  overnight_pct: 0.10

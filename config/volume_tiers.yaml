@@ -1,0 +1,43 @@
+# Volume tier definitions
+# Each tier specifies target row counts for all data domains
+
+tiers:
+  small:
+    customers: 500
+    online_orders: 1000
+    instore_transactions: 500
+    clickstream_events: 50000
+    emails_sent: 5000
+    loyalty_members: 300
+    support_tickets: 150
+    ab_experiments: 10
+
+  medium:
+    customers: 50000
+    online_orders: 100000
+    instore_transactions: 40000
+    clickstream_events: 5000000
+    emails_sent: 500000
+    loyalty_members: 30000
+    support_tickets: 12000
+    ab_experiments: 20
+
+  large:
+    customers: 500000
+    online_orders: 1000000
+    instore_transactions: 400000
+    clickstream_events: 50000000
+    emails_sent: 5000000
+    loyalty_members: 300000
+    support_tickets: 120000
+    ab_experiments: 30
+
+  xl:
+    customers: 5000000
+    online_orders: 10000000
+    instore_transactions: 4000000
+    clickstream_events: 500000000
+    emails_sent: 50000000
+    loyalty_members: 3000000
+    support_tickets: 1200000
+    ab_experiments: 40

@@ -1,0 +1,384 @@
+{
+  "version": "1.0.0",
+  "name": "Ecommerce Omnichannel Synthetic Data Schema",
+  "description": "Comprehensive schema dictionary for all 19 synthetic ecommerce tables, including primary keys, foreign keys, data types, and join semantics.",
+  "tables": {
+    "customers": {
+      "file": "customers.parquet",
+      "description": "Customer accounts and demographic profiles across online and store channels.",
+      "primary_key": "customer_id",
+      "columns": {
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "Primary key" },
+        "first_name": { "type": "string", "nullable": false, "description": "Customer given name" },
+        "last_name": { "type": "string", "nullable": false, "description": "Customer family name" },
+        "email": { "type": "string", "nullable": false, "description": "Unique email address, used for marketing identity stitching" },
+        "phone": { "type": "string", "nullable": false, "description": "Phone number, used for in-store POS lookup stitching" },
+        "date_of_birth": { "type": "date", "nullable": false, "description": "Customer date of birth (18-85)" },
+        "gender": { "type": "string", "nullable": false, "description": "Gender identity (M, F, Non-binary, Prefer not to say)" },
+        "created_at": { "type": "timestamp", "nullable": false, "description": "Account registration timestamp" },
+        "channel_acquired": { "type": "string", "nullable": false, "description": "Acquisition channel (web, store, social, referral)" },
+        "is_active": { "type": "boolean", "nullable": false, "description": "Account status flag" },
+        "customer_segment": { "type": "string", "nullable": false, "description": "RFM segment (new, returning, vip, churned)" }
+      }
+    },
+    "addresses": {
+      "file": "addresses.parquet",
+      "description": "Physical shipping and billing street addresses associated with customer accounts.",
+      "primary_key": "address_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id"
+      },
+      "columns": {
+        "address_id": { "type": "string (UUID)", "nullable": false, "description": "Primary key" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "address_type": { "type": "string", "nullable": false, "description": "billing or shipping" },
+        "street_address": { "type": "string", "nullable": false, "description": "Street line" },
+        "city": { "type": "string", "nullable": false, "description": "City name" },
+        "state": { "type": "string", "nullable": false, "description": "US state 2-letter code" },
+        "zip_code": { "type": "string", "nullable": false, "description": "Postal code" },
+        "country": { "type": "string", "nullable": false, "description": "Country code (US)" },
+        "is_default": { "type": "boolean", "nullable": false, "description": "Default address indicator" }
+      }
+    },
+    "products": {
+      "file": "products.parquet",
+      "description": "Fixed dimension product catalog (~2,000 SKUs) with pricing, categories, and reviews.",
+      "primary_key": "product_id",
+      "columns": {
+        "product_id": { "type": "string", "nullable": false, "description": "SKU identifier (e.g. SKU-00042)" },
+        "product_name": { "type": "string", "nullable": false, "description": "Product display title" },
+        "category": { "type": "string", "nullable": false, "description": "Department (Electronics, Apparel, Home & Kitchen, etc.)" },
+        "subcategory": { "type": "string", "nullable": false, "description": "Sub-department (Laptops, T-Shirts, etc.)" },
+        "brand": { "type": "string", "nullable": false, "description": "Manufacturer or brand name" },
+        "price": { "type": "float", "nullable": false, "description": "Retail selling price" },
+        "cost": { "type": "float", "nullable": false, "description": "Wholesale acquisition cost" },
+        "weight_kg": { "type": "float", "nullable": false, "description": "Physical shipping weight" },
+        "is_active": { "type": "boolean", "nullable": false, "description": "Availability status" },
+        "created_at": { "type": "date", "nullable": false, "description": "Catalog introduction date" },
+        "avg_rating": { "type": "float", "nullable": false, "description": "Aggregate customer review rating (1.0-5.0)" },
+        "review_count": { "type": "integer", "nullable": false, "description": "Number of published reviews" }
+      }
+    },
+    "stores": {
+      "file": "stores.parquet",
+      "description": "Fixed dimension brick-and-mortar retail stores (~50 locations).",
+      "primary_key": "store_id",
+      "columns": {
+        "store_id": { "type": "string", "nullable": false, "description": "Store ID (e.g. STORE-001)" },
+        "store_name": { "type": "string", "nullable": false, "description": "Location name" },
+        "store_type": { "type": "string", "nullable": false, "description": "flagship, standard, outlet, kiosk" },
+        "street_address": { "type": "string", "nullable": false, "description": "Physical address" },
+        "city": { "type": "string", "nullable": false, "description": "City" },
+        "state": { "type": "string", "nullable": false, "description": "US state code" },
+        "zip_code": { "type": "string", "nullable": false, "description": "Postal code" },
+        "region": { "type": "string", "nullable": false, "description": "Geographic region (Northeast, West, etc.)" },
+        "opened_date": { "type": "date", "nullable": false, "description": "Store opening date" },
+        "square_footage": { "type": "integer", "nullable": false, "description": "Retail floor size" },
+        "employee_count": { "type": "integer", "nullable": false, "description": "Staff head count" }
+      }
+    },
+    "instore_accounts": {
+      "file": "instore_accounts.parquet",
+      "description": "Point-of-sale customer profiles captured at physical cash registers.",
+      "primary_key": "instore_account_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id (nullable)",
+        "store_id": "stores.store_id"
+      },
+      "columns": {
+        "instore_account_id": { "type": "string (UUID)", "nullable": false, "description": "POS account ID" },
+        "customer_id": { "type": "string (UUID)", "nullable": true, "description": "FK to customers if linked" },
+        "store_id": { "type": "string", "nullable": false, "description": "Home store ID" },
+        "phone_number": { "type": "string", "nullable": false, "description": "Phone number for identity resolution" },
+        "created_at": { "type": "timestamp", "nullable": false, "description": "POS enrolment time" },
+        "last_visit_date": { "type": "date", "nullable": false, "description": "Most recent in-store visit" },
+        "total_visits": { "type": "integer", "nullable": false, "description": "Total visits recorded" }
+      }
+    },
+    "orders_online": {
+      "file": "orders_online.parquet",
+      "description": "E-commerce web checkout orders.",
+      "primary_key": "order_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id",
+        "shipping_address_id": "addresses.address_id",
+        "billing_address_id": "addresses.address_id",
+        "session_id": "clickstream.session_id"
+      },
+      "columns": {
+        "order_id": { "type": "string (UUID)", "nullable": false, "description": "Online order primary key" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "order_date": { "type": "timestamp", "nullable": false, "description": "Order placement timestamp" },
+        "status": { "type": "string", "nullable": false, "description": "pending, confirmed, shipped, delivered, cancelled, returned" },
+        "shipping_address_id": { "type": "string (UUID)", "nullable": false, "description": "FK to addresses" },
+        "billing_address_id": { "type": "string (UUID)", "nullable": false, "description": "FK to addresses" },
+        "subtotal": { "type": "float", "nullable": false, "description": "Items pre-discount sum" },
+        "discount_amount": { "type": "float", "nullable": false, "description": "Promotional discounts applied" },
+        "tax_amount": { "type": "float", "nullable": false, "description": "Sales tax calculated per state" },
+        "shipping_cost": { "type": "float", "nullable": false, "description": "Shipping fee" },
+        "total_amount": { "type": "float", "nullable": false, "description": "Final customer charged total" },
+        "payment_method": { "type": "string", "nullable": false, "description": "credit_card, debit_card, paypal, apple_pay, gift_card" },
+        "coupon_code": { "type": "string", "nullable": true, "description": "Coupon applied if any" },
+        "device_type": { "type": "string", "nullable": false, "description": "desktop, mobile, tablet" },
+        "session_id": { "type": "string (UUID)", "nullable": false, "description": "FK to clickstream session" }
+      }
+    },
+    "order_items_online": {
+      "file": "order_items_online.parquet",
+      "description": "Individual line items for online web orders.",
+      "primary_key": "order_item_id",
+      "foreign_keys": {
+        "order_id": "orders_online.order_id",
+        "product_id": "products.product_id"
+      },
+      "columns": {
+        "order_item_id": { "type": "string (UUID)", "nullable": false, "description": "Primary key" },
+        "order_id": { "type": "string (UUID)", "nullable": false, "description": "FK to orders_online" },
+        "product_id": { "type": "string", "nullable": false, "description": "FK to products" },
+        "quantity": { "type": "integer", "nullable": false, "description": "Units purchased" },
+        "unit_price": { "type": "float", "nullable": false, "description": "Selling price at time of purchase" },
+        "discount_pct": { "type": "float", "nullable": false, "description": "Percentage discount applied" },
+        "line_total": { "type": "float", "nullable": false, "description": "Line total = quantity * unit_price * (1 - discount)" }
+      }
+    },
+    "orders_instore": {
+      "file": "orders_instore.parquet",
+      "description": "Physical retail Point-of-Sale (POS) cash register transactions.",
+      "primary_key": "transaction_id",
+      "foreign_keys": {
+        "store_id": "stores.store_id",
+        "customer_id": "customers.customer_id (nullable)",
+        "instore_account_id": "instore_accounts.instore_account_id (nullable)"
+      },
+      "columns": {
+        "transaction_id": { "type": "string (UUID)", "nullable": false, "description": "POS transaction primary key" },
+        "store_id": { "type": "string", "nullable": false, "description": "FK to stores" },
+        "instore_account_id": { "type": "string (UUID)", "nullable": true, "description": "FK to instore_accounts (null for guest)" },
+        "customer_id": { "type": "string (UUID)", "nullable": true, "description": "FK to customers if linked" },
+        "transaction_date": { "type": "timestamp", "nullable": false, "description": "Register timestamp" },
+        "register_id": { "type": "string", "nullable": false, "description": "Terminal register identifier" },
+        "employee_id": { "type": "string", "nullable": false, "description": "Cashier employee ID" },
+        "subtotal": { "type": "float", "nullable": false, "description": "Items pre-tax sum" },
+        "tax_amount": { "type": "float", "nullable": false, "description": "Sales tax" },
+        "discount_amount": { "type": "float", "nullable": false, "description": "Coupon/markdown discount" },
+        "total_amount": { "type": "float", "nullable": false, "description": "Total payment collected" },
+        "payment_method": { "type": "string", "nullable": false, "description": "cash, credit_card, debit_card, mobile_pay, gift_card" },
+        "coupon_code": { "type": "string", "nullable": true, "description": "Coupon code if scanned" }
+      }
+    },
+    "order_items_instore": {
+      "file": "order_items_instore.parquet",
+      "description": "Individual line items scanned at in-store POS registers.",
+      "primary_key": "line_item_id",
+      "foreign_keys": {
+        "transaction_id": "orders_instore.transaction_id",
+        "product_id": "products.product_id"
+      },
+      "columns": {
+        "line_item_id": { "type": "string (UUID)", "nullable": false, "description": "Primary key" },
+        "transaction_id": { "type": "string (UUID)", "nullable": false, "description": "FK to orders_instore" },
+        "product_id": { "type": "string", "nullable": false, "description": "FK to products" },
+        "quantity": { "type": "integer", "nullable": false, "description": "Units scanned" },
+        "unit_price": { "type": "float", "nullable": false, "description": "Price per unit" },
+        "discount_pct": { "type": "float", "nullable": false, "description": "Line discount" },
+        "line_total": { "type": "float", "nullable": false, "description": "Total for line" }
+      }
+    },
+    "clickstream": {
+      "file": "clickstream.parquet",
+      "description": "High-volume web browsing telemetry following realistic behavioral conversion funnels.",
+      "primary_key": "event_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id (nullable)",
+        "product_id": "products.product_id (nullable)"
+      },
+      "columns": {
+        "event_id": { "type": "string (UUID)", "nullable": false, "description": "Event primary key" },
+        "session_id": { "type": "string (UUID)", "nullable": false, "description": "Session grouping key (stitches to orders_online.session_id)" },
+        "customer_id": { "type": "string (UUID)", "nullable": true, "description": "FK to customers (null for anonymous browse)" },
+        "event_timestamp": { "type": "timestamp", "nullable": false, "description": "Event timestamp" },
+        "event_type": { "type": "string", "nullable": false, "description": "page_view, product_view, search, add_to_cart, begin_checkout, purchase, etc." },
+        "page_url": { "type": "string", "nullable": false, "description": "URL path visited" },
+        "referrer": { "type": "string", "nullable": false, "description": "Acquisition source (google, direct, email, instagram, etc.)" },
+        "device_type": { "type": "string", "nullable": false, "description": "desktop, mobile, tablet" },
+        "browser": { "type": "string", "nullable": false, "description": "Browser (Chrome, Safari, Firefox, Edge)" },
+        "os": { "type": "string", "nullable": false, "description": "OS (Windows, macOS, iOS, Android)" },
+        "ip_address": { "type": "string", "nullable": false, "description": "Anonymized client IP" },
+        "product_id": { "type": "string", "nullable": true, "description": "FK to products for SKU view/cart events" },
+        "search_query": { "type": "string", "nullable": true, "description": "Search keyword for search events" },
+        "cart_value": { "type": "float", "nullable": true, "description": "Cumulative cart value for cart events" }
+      }
+    },
+    "email_campaigns": {
+      "file": "email_campaigns.parquet",
+      "description": "Marketing and transactional email campaign catalog.",
+      "primary_key": "campaign_id",
+      "columns": {
+        "campaign_id": { "type": "string", "nullable": false, "description": "Campaign key (e.g. CAMP-0001)" },
+        "campaign_name": { "type": "string", "nullable": false, "description": "Marketing campaign name" },
+        "campaign_type": { "type": "string", "nullable": false, "description": "promotional, welcome, abandoned_cart, newsletter, etc." },
+        "subject_line": { "type": "string", "nullable": false, "description": "Email subject header" },
+        "send_date": { "type": "date", "nullable": false, "description": "Send date" },
+        "target_segment": { "type": "string", "nullable": false, "description": "Target audience segment" }
+      }
+    },
+    "email_events": {
+      "file": "email_events.parquet",
+      "description": "Per-recipient email engagement telemetry (sent, delivered, opened, clicked, unsubscribed).",
+      "primary_key": "email_event_id",
+      "foreign_keys": {
+        "campaign_id": "email_campaigns.campaign_id",
+        "customer_id": "customers.customer_id"
+      },
+      "columns": {
+        "email_event_id": { "type": "string (UUID)", "nullable": false, "description": "Primary key" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "campaign_id": { "type": "string", "nullable": false, "description": "FK to email_campaigns" },
+        "event_type": { "type": "string", "nullable": false, "description": "sent, delivered, opened, clicked, unsubscribed, bounced, spam_reported" },
+        "event_timestamp": { "type": "timestamp", "nullable": false, "description": "Event timestamp" },
+        "email_address": { "type": "string", "nullable": false, "description": "Recipient email (matches customers.email)" },
+        "link_clicked": { "type": "string", "nullable": true, "description": "Clicked link URL" },
+        "device_type": { "type": "string", "nullable": false, "description": "Device category" }
+      }
+    },
+    "loyalty_members": {
+      "file": "loyalty_members.parquet",
+      "description": "Enrolled customer loyalty profiles, point balances, and tier statuses.",
+      "primary_key": "loyalty_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id",
+        "preferred_store_id": "stores.store_id (nullable)"
+      },
+      "columns": {
+        "loyalty_id": { "type": "string", "nullable": false, "description": "Loyalty membership ID (e.g. LOY-000001)" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "tier": { "type": "string", "nullable": false, "description": "Bronze, Silver, Gold, Platinum" },
+        "points_balance": { "type": "integer", "nullable": false, "description": "Current redeemable points balance" },
+        "lifetime_points": { "type": "integer", "nullable": false, "description": "Cumulative earned points" },
+        "enrolled_date": { "type": "date", "nullable": false, "description": "Program enrolment date" },
+        "tier_expiry_date": { "type": "date", "nullable": false, "description": "Tier qualification expiration" },
+        "preferred_store_id": { "type": "string", "nullable": true, "description": "FK to stores" }
+      }
+    },
+    "loyalty_transactions": {
+      "file": "loyalty_transactions.parquet",
+      "description": "Points earn, redemption, expiration, and tier bonus ledger events.",
+      "primary_key": "loyalty_txn_id",
+      "foreign_keys": {
+        "loyalty_id": "loyalty_members.loyalty_id",
+        "source_order_id": "orders_online.order_id or orders_instore.transaction_id (nullable)"
+      },
+      "columns": {
+        "loyalty_txn_id": { "type": "string (UUID)", "nullable": false, "description": "Ledger entry primary key" },
+        "loyalty_id": { "type": "string", "nullable": false, "description": "FK to loyalty_members" },
+        "transaction_date": { "type": "timestamp", "nullable": false, "description": "Transaction timestamp" },
+        "transaction_type": { "type": "string", "nullable": false, "description": "earn, redeem, expire, bonus, tier_bonus" },
+        "points": { "type": "integer", "nullable": false, "description": "Point change (positive for earn, negative for redeem)" },
+        "source_order_id": { "type": "string (UUID)", "nullable": true, "description": "FK to qualifying order if purchase-linked" },
+        "description": { "type": "string", "nullable": false, "description": "Ledger entry reason" }
+      }
+    },
+    "reviews": {
+      "file": "reviews.parquet",
+      "description": "Verified and unverified customer ratings and reviews on products.",
+      "primary_key": "review_id",
+      "foreign_keys": {
+        "product_id": "products.product_id",
+        "customer_id": "customers.customer_id",
+        "order_id": "orders_online.order_id (nullable)"
+      },
+      "columns": {
+        "review_id": { "type": "string (UUID)", "nullable": false, "description": "Review primary key" },
+        "product_id": { "type": "string", "nullable": false, "description": "FK to products" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "order_id": { "type": "string (UUID)", "nullable": true, "description": "FK to orders_online if verified purchase" },
+        "rating": { "type": "integer", "nullable": false, "description": "Star rating (1 to 5)" },
+        "title": { "type": "string", "nullable": false, "description": "Review title" },
+        "body": { "type": "string", "nullable": false, "description": "Review commentary text" },
+        "created_at": { "type": "timestamp", "nullable": false, "description": "Post timestamp" },
+        "is_verified_purchase": { "type": "boolean", "nullable": false, "description": "Verified buyer flag" },
+        "helpful_votes": { "type": "integer", "nullable": false, "description": "Helpful reaction count" }
+      }
+    },
+    "support_tickets": {
+      "file": "support_tickets.parquet",
+      "description": "Customer service tickets with resolution durations and CSAT scores.",
+      "primary_key": "ticket_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id",
+        "order_id": "orders_online.order_id or orders_instore.transaction_id (nullable)"
+      },
+      "columns": {
+        "ticket_id": { "type": "string (UUID)", "nullable": false, "description": "Ticket primary key" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "order_id": { "type": "string (UUID)", "nullable": true, "description": "FK to order if dispute/inquiry" },
+        "channel": { "type": "string", "nullable": false, "description": "email, chat, phone, social" },
+        "category": { "type": "string", "nullable": false, "description": "shipping, returns, billing, product_defect, account, general_inquiry" },
+        "priority": { "type": "string", "nullable": false, "description": "low, medium, high, urgent" },
+        "status": { "type": "string", "nullable": false, "description": "open, in_progress, waiting_customer, resolved, closed, escalated" },
+        "subject": { "type": "string", "nullable": false, "description": "Ticket summary subject" },
+        "description": { "type": "string", "nullable": false, "description": "Issue details" },
+        "created_at": { "type": "timestamp", "nullable": false, "description": "Open timestamp" },
+        "first_response_at": { "type": "timestamp", "nullable": true, "description": "First agent reply time" },
+        "resolved_at": { "type": "timestamp", "nullable": true, "description": "Resolution time" },
+        "satisfaction_score": { "type": "integer", "nullable": true, "description": "Post-resolution CSAT rating (1 to 5)" },
+        "agent_id": { "type": "string", "nullable": false, "description": "Support agent ID" },
+        "is_fraud_related": { "type": "boolean", "nullable": false, "description": "Linked to fraud investigations" }
+      }
+    },
+    "experiments": {
+      "file": "experiments.parquet",
+      "description": "A/B testing campaign catalog.",
+      "primary_key": "experiment_id",
+      "columns": {
+        "experiment_id": { "type": "string", "nullable": false, "description": "Experiment ID (e.g. EXP-001)" },
+        "experiment_name": { "type": "string", "nullable": false, "description": "Test name" },
+        "experiment_type": { "type": "string", "nullable": false, "description": "ui, pricing, email, recommendation, shipping" },
+        "start_date": { "type": "date", "nullable": false, "description": "Experiment start date" },
+        "end_date": { "type": "date", "nullable": false, "description": "Experiment end date" },
+        "status": { "type": "string", "nullable": false, "description": "draft, running, concluded" },
+        "traffic_pct": { "type": "float", "nullable": false, "description": "Audience allocation fraction" }
+      }
+    },
+    "experiment_assignments": {
+      "file": "experiment_assignments.parquet",
+      "description": "Customer variant assignments and conversion tracking.",
+      "primary_key": "assignment_id",
+      "foreign_keys": {
+        "experiment_id": "experiments.experiment_id",
+        "customer_id": "customers.customer_id",
+        "conversion_order_id": "orders_online.order_id (nullable)"
+      },
+      "columns": {
+        "assignment_id": { "type": "string (UUID)", "nullable": false, "description": "Assignment primary key" },
+        "experiment_id": { "type": "string", "nullable": false, "description": "FK to experiments" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "variant": { "type": "string", "nullable": false, "description": "control, treatment_a, treatment_b" },
+        "assigned_at": { "type": "timestamp", "nullable": false, "description": "Assignment timestamp" },
+        "converted": { "type": "boolean", "nullable": false, "description": "Conversion indicator" },
+        "conversion_order_id": { "type": "string (UUID)", "nullable": true, "description": "FK to conversion order" },
+        "conversion_value": { "type": "float", "nullable": true, "description": "Revenue value generated" }
+      }
+    },
+    "fraud_flags": {
+      "file": "fraud_flags.parquet",
+      "description": "Detected anomalies and ground-truth fraud labels for machine learning.",
+      "primary_key": "flag_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id",
+        "entity_id": "orders_online.order_id or orders_instore.transaction_id"
+      },
+      "columns": {
+        "flag_id": { "type": "string (UUID)", "nullable": false, "description": "Flag primary key" },
+        "entity_type": { "type": "string", "nullable": false, "description": "order, account, transaction, session" },
+        "entity_id": { "type": "string (UUID)", "nullable": false, "description": "Flagged entity identifier" },
+        "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
+        "fraud_type": { "type": "string", "nullable": false, "description": "card_testing, account_takeover, promo_abuse, refund_abuse, synthetic_identity, velocity_spike" },
+        "risk_score": { "type": "float", "nullable": false, "description": "Model-like anomaly probability score (0.0 to 1.0)" },
+        "is_confirmed_fraud": { "type": "boolean", "nullable": false, "description": "Ground truth label for ML evaluation" },
+        "detected_at": { "type": "timestamp", "nullable": false, "description": "Detection timestamp" },
+        "details": { "type": "string", "nullable": false, "description": "JSON-encoded anomaly characteristics" }
+      }
+    }
+  }
+}
