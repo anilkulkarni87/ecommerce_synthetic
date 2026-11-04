@@ -203,3 +203,4 @@ class DDLGenerator:
             f"COPY INTO {qual} FROM @{stage}/{table_name}.parquet "
             f"FILE_FORMAT = (TYPE = PARQUET) MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;"
         )
+

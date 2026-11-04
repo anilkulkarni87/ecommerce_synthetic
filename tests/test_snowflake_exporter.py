@@ -89,3 +89,4 @@ def test_snowflake_export_mocked(sample_data_dir: Path) -> None:
     assert any("PUT file://" in q for q in executed_queries)
     assert any("CREATE TABLE IF NOT EXISTS ANALYTICS_DB.ECOMMERCE.customers" in q for q in executed_queries)
     assert any("COPY INTO ANALYTICS_DB.ECOMMERCE.customers" in q for q in executed_queries)
+

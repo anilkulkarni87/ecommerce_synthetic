@@ -247,3 +247,4 @@ class DatabricksExporter(BaseExporter):
             destination=f"{self.catalog}.{self.schema_name}",
             metadata={"volume": self.volume_name, "warehouse_id": self.warehouse_id},
         )
+

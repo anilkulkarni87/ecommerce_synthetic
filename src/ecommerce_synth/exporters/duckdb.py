@@ -114,3 +114,4 @@ class DuckDBExporter(BaseExporter):
             destination=str(self.db_path),
             metadata={"file_size_mb": round(file_size_mb, 2)},
         )
+

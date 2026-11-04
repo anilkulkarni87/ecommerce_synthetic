@@ -99,7 +99,7 @@ Ecommerce_synthetic/
 │   ├── persona.py                    # 7 behavioral customer personas + fraud engine
 │   ├── orchestrator.py               # Dependency DAG pipeline executor
 │   ├── incremental.py                # Incremental batch & daily simulation engine
-│   ├── duckdb_exporter.py            # Backward-compatible DuckDB exporter wrapper
+│   ├── duckdb_exporter.py            # Backward-compatible DuckDB bundle generator
 │   ├── profiler.py                   # Business KPI dashboard & HTML report engine
 │   ├── streamer.py                   # Real-time chronological event streaming engine
 │   ├── exporters/                    # Multi-warehouse exporter framework

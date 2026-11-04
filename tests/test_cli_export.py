@@ -64,3 +64,4 @@ def test_cli_export_bigquery_missing_sdk(sample_dataset: Path) -> None:
     )
     assert result.exit_code != 0
     assert "pip install 'ecommerce-synth[bigquery]'" in result.stdout
+

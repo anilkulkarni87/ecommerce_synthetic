@@ -84,3 +84,4 @@ GROUP BY 1, 2, 3, 4, 5;"""
             ("v_omnichannel_sales", cls.get_view_sql("v_omnichannel_sales", dialect, catalog_or_project, schema_or_dataset)),
             ("v_customer_360", cls.get_view_sql("v_customer_360", dialect, catalog_or_project, schema_or_dataset)),
         ]
+

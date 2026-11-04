@@ -112,3 +112,4 @@ def test_view_generator_all_dialects() -> None:
     views_bq = ViewGenerator.get_all_views("bigquery", "proj", "ds")
     assert "`proj.ds.orders_online`" in views_bq[0][1]
     assert "`proj.ds.v_omnichannel_sales`" in views_bq[1][1]
+

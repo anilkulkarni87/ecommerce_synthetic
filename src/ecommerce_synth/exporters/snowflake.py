@@ -250,3 +250,4 @@ class SnowflakeExporter(BaseExporter):
             destination=f"{self.database}.{self.schema_name}",
             metadata={"stage": self.stage_name, "warehouse": self.warehouse},
         )
+

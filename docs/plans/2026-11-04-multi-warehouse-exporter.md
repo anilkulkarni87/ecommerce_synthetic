@@ -147,3 +147,4 @@
 - [ ] Update `AGENTS.md` and `.agents/skills/ecommerce-synthetic/SKILL.md` with CLI recipes and connection setup instructions.
 - [ ] Run full test suite across all 23 existing tests + new unit tests.
 - [ ] Commit all changes to git.
+
