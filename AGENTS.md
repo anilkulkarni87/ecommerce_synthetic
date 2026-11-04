@@ -31,11 +31,12 @@ All CLI commands are accessible via `ecommerce-synth <command>` or `python -m ec
 
 | Command | Usage | Description |
 |---|---|---|
-| `generate` | `ecommerce-synth generate --tier <tier> [--duckdb] [--output <dir>]` | Generates full omnichannel dataset |
+| `generate` | `ecommerce-synth generate --tier <tier> [--export <target>] [--duckdb]` | Generates full omnichannel dataset |
+| `export` | `ecommerce-synth export <data_dir> --target [duckdb\|databricks\|snowflake\|bigquery]` | Automated staging, DDL, constraints & bulk loading |
+| `export-duckdb` | `ecommerce-synth export-duckdb <data_dir> [--output <path>]` | Bundles all 19 tables into DuckDB |
 | `validate` | `ecommerce-synth validate <data_dir>` | Runs 29 referential integrity FK checks |
 | `preview` / `inspect` | `ecommerce-synth preview <data_dir> <table_name> [--limit 5]` | Displays schema and sample rows |
 | `profile` | `ecommerce-synth profile <data_dir> [--html <report.html>]` | Displays business KPI dashboard & GMV |
-| `export-duckdb` | `ecommerce-synth export-duckdb <data_dir> [--output <path>]` | Bundles all 19 tables into DuckDB |
 | `stream` | `ecommerce-synth stream <data_dir> [--speed 100] [--json]` | Chronological live event streamer |
 
 ---
@@ -98,18 +99,31 @@ Ecommerce_synthetic/
 │   ├── persona.py                    # 7 behavioral customer personas + fraud engine
 │   ├── orchestrator.py               # Dependency DAG pipeline executor
 │   ├── incremental.py                # Incremental batch & daily simulation engine
-│   ├── duckdb_exporter.py            # Standalone DuckDB bundle generator
+│   ├── duckdb_exporter.py            # Backward-compatible DuckDB exporter wrapper
 │   ├── profiler.py                   # Business KPI dashboard & HTML report engine
 │   ├── streamer.py                   # Real-time chronological event streaming engine
+│   ├── exporters/                    # Multi-warehouse exporter framework
+│   │   ├── base.py                   # BaseExporter abstract class and config
+│   │   ├── ddl.py                    # Universal DDL compiler for Databricks/Snowflake/BQ
+│   │   ├── views.py                  # Analytical views (v_omnichannel_sales, v_customer_360)
+│   │   ├── duckdb.py                 # DuckDB exporter
+│   │   ├── databricks.py             # Databricks Unity Catalog exporter
+│   │   ├── snowflake.py              # Snowflake stage & COPY INTO exporter
+│   │   └── bigquery.py               # BigQuery direct / GCS exporter
 │   ├── generators/                   # Domain data generators (11 modules)
 │   └── utils/
 │       ├── temporal.py               # Seasonality, diurnal, and holiday patterns
 │       └── writer.py                 # Parquet writer and _manifest.json builder
-├── tests/                            # Pytest test suite (23 tests, 100% passing)
+├── tests/                            # Pytest test suite (44 tests, 100% passing)
 │   ├── test_generators.py
 │   ├── test_integrity.py
 │   ├── test_incremental.py
 │   ├── test_duckdb_and_profiler.py
+│   ├── test_exporters_ddl.py
+│   ├── test_databricks_exporter.py
+│   ├── test_snowflake_exporter.py
+│   ├── test_bigquery_exporter.py
+│   ├── test_cli_export.py
 │   └── test_streamer.py
 └── output/                           # Default directory for generated Parquet runs
 ```

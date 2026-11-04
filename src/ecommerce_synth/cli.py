@@ -33,10 +33,18 @@ def generate(
     days: int = typer.Option(1, "--days", help="Number of days of incremental data to generate"),
     daily_batches: bool = typer.Option(False, "--daily-batches", help="Simulate sequential daily batches"),
     duckdb: bool = typer.Option(False, "--duckdb", help="Also export all tables to a standalone ecommerce.duckdb database"),
+    export_target: str = typer.Option(None, "--export", "-e", help="Auto-export to target: duckdb, databricks, snowflake, bigquery"),
+    catalog: str = typer.Option(None, "--catalog", help="Target catalog/database name"),
+    schema: str = typer.Option(None, "--schema", "-s", help="Target schema/dataset name"),
+    warehouse: str = typer.Option(None, "--warehouse", "-w", help="Target warehouse ID/name"),
+    project: str = typer.Option(None, "--project", "-p", help="Target GCP project ID for BigQuery"),
+    dataset: str = typer.Option(None, "--dataset", "-d", help="Target BigQuery dataset name"),
 ) -> None:
     """Generate synthetic ecommerce data at the specified volume tier."""
 
     console.print(f"\n🛒 [bold]Ecommerce Synthetic Data Generator[/bold] v{__version__}\n")
+
+    target_dir = None
 
     if incremental:
         inc_gen = IncrementalGenerator(
@@ -46,26 +54,33 @@ def generate(
             seed=seed,
         )
         inc_gen.run()
-        if duckdb:
-            from .duckdb_exporter import export_to_duckdb
-            export_to_duckdb(incremental)
-        return
+        target_dir = Path(incremental)
+    else:
+        config = load_config(
+            tier_name=tier,
+            seed=seed,
+            output_dir=output,
+            fraud_rate=fraud_rate,
+        )
 
-    config = load_config(
-        tier_name=tier,
-        seed=seed,
-        output_dir=output,
-        fraud_rate=fraud_rate,
-    )
+        only_list = [s.strip() for s in only.split(",")] if only else None
 
-    only_list = [s.strip() for s in only.split(",")] if only else None
+        orchestrator = Orchestrator(config)
+        orchestrator.run(only=only_list)
+        target_dir = config.output_dir
 
-    orchestrator = Orchestrator(config)
-    orchestrator.run(only=only_list)
-
-    if duckdb:
-        from .duckdb_exporter import export_to_duckdb
-        export_to_duckdb(config.output_dir)
+    # Handle post-generation exports
+    target_to_export = export_target or ("duckdb" if duckdb else None)
+    if target_to_export and target_dir:
+        export_cmd(
+            data_dir=str(target_dir),
+            target=target_to_export,
+            catalog=catalog,
+            schema=schema,
+            warehouse=warehouse,
+            project=project,
+            dataset=dataset,
+        )
 
 
 @app.command()
@@ -98,155 +113,212 @@ def info(
 def validate(
     data_dir: str = typer.Argument(help="Path to generated data directory"),
 ) -> None:
-    """Validate referential integrity across all 19 generated tables."""
-
+    """Validate referential integrity across all generated Parquet files."""
     import polars as pl
 
     path = Path(data_dir)
-    if not path.exists():
-        console.print(f"[red]Error: Directory not found: {data_dir}[/red]")
+    console.print(f"\n🔍 [bold]Validating referential integrity in:[/bold] {path}\n")
+
+    manifest_file = path / "_manifest.json"
+    if not manifest_file.exists():
+        console.print("[red]Error: _manifest.json not found in output directory[/red]")
         raise typer.Exit(1)
 
-    manifest_path = path / "_manifest.json"
-    if manifest_path.exists():
-        with open(manifest_path) as f:
-            manifest = json.load(f)
-        console.print(f"Validating [bold]{manifest.get('tier', 'unknown').upper()}[/bold] tier dataset")
-        console.print(f"Generated at: {manifest.get('generated_at', 'unknown')}\n")
+    with open(manifest_file) as f:
+        manifest = json.load(f)
+
+    console.print(f"  Tier: [cyan]{manifest.get('tier', 'unknown')}[/cyan]")
+    console.print(f"  Generated: {manifest.get('generated_at', 'unknown')}")
+    console.print(f"  Seed: {manifest.get('seed', 'unknown')}\n")
 
     errors: list[str] = []
     checks_passed = 0
 
-    def load(name: str) -> pl.DataFrame | None:
-        fp = path / f"{name}.parquet"
-        if fp.exists():
-            return pl.read_parquet(fp)
-        return None
-
-    # Load all 19 datasets
-    customers = load("customers")
-    addresses = load("addresses")
-    products = load("products")
-    stores = load("stores")
-    instore_accounts = load("instore_accounts")
-    orders_online = load("orders_online")
-    order_items_online = load("order_items_online")
-    orders_instore = load("orders_instore")
-    order_items_instore = load("order_items_instore")
-    clickstream = load("clickstream")
-    email_campaigns = load("email_campaigns")
-    email_events = load("email_events")
-    loyalty_members = load("loyalty_members")
-    loyalty_txns = load("loyalty_transactions")
-    reviews = load("reviews")
-    support_tickets = load("support_tickets")
-    experiments = load("experiments")
-    experiment_assignments = load("experiment_assignments")
-    fraud_flags = load("fraud_flags")
-
-    # Helper function for checking FK
-    def check_fk(
-        source_df: pl.DataFrame | None,
-        source_col: str,
-        target_ids: set,
-        rel_desc: str,
-        allow_null: bool = False,
-    ) -> None:
+    def check(name: str, fn) -> None:
         nonlocal checks_passed
-        if source_df is None or len(target_ids) == 0:
-            return
-
-        if allow_null:
-            filtered = source_df.filter(pl.col(source_col).is_not_null())
-            if filtered.height == 0:
+        try:
+            passed, detail = fn()
+            if passed:
                 checks_passed += 1
-                console.print(f"  ✓ {rel_desc} (0 non-null values)")
-                return
-            orphans = filtered.filter(~pl.col(source_col).is_in(target_ids))
-        else:
-            orphans = source_df.filter(~pl.col(source_col).is_in(target_ids))
+                console.print(f"  ✓ [green]{name}[/green]: {detail}")
+            else:
+                errors.append(f"FAIL: {name} — {detail}")
+                console.print(f"  ✗ [red]{name}[/red]: {detail}")
+        except Exception as e:
+            errors.append(f"ERROR: {name} — {e}")
+            console.print(f"  ✗ [red]{name}[/red]: {e}")
 
-        if orphans.height > 0:
-            errors.append(f"  ✗ {orphans.height} {rel_desc} reference invalid IDs")
-        else:
-            checks_passed += 1
-            console.print(f"  ✓ {rel_desc}")
+    # Load tables helper
+    tables: dict[str, pl.DataFrame] = {}
 
-    # Primary key sets
-    customer_ids = set(customers["customer_id"].to_list()) if customers is not None else set()
-    address_ids = set(addresses["address_id"].to_list()) if addresses is not None else set()
-    product_ids = set(products["product_id"].to_list()) if products is not None else set()
-    store_ids = set(stores["store_id"].to_list()) if stores is not None else set()
-    instore_account_ids = set(instore_accounts["instore_account_id"].to_list()) if instore_accounts is not None else set()
-    online_order_ids = set(orders_online["order_id"].to_list()) if orders_online is not None else set()
-    instore_order_ids = set(orders_instore["transaction_id"].to_list()) if orders_instore is not None else set()
-    all_order_ids = online_order_ids.union(instore_order_ids)
-    loyalty_ids = set(loyalty_members["loyalty_id"].to_list()) if loyalty_members is not None else set()
-    campaign_ids = set(email_campaigns["campaign_id"].to_list()) if email_campaigns is not None else set()
-    experiment_ids = set(experiments["experiment_id"].to_list()) if experiments is not None else set()
+    def get_table(name: str) -> pl.DataFrame | None:
+        if name not in tables:
+            f = path / f"{name}.parquet"
+            if f.exists():
+                tables[name] = pl.read_parquet(f)
+            else:
+                return None
+        return tables[name]
 
-    console.print(f"[bold cyan]Core Dimensions Loaded:[/bold cyan]")
-    if customers is not None:
-        console.print(f"  Customers: {len(customer_ids):,}")
-    if products is not None:
-        console.print(f"  Products: {len(product_ids):,}")
-    if stores is not None:
-        console.print(f"  Stores: {len(store_ids):,}")
+    # --- Customer & Address Checks ---
+    def check_addresses_customer_fk():
+        addr = get_table("addresses")
+        cust = get_table("customers")
+        if addr is None or cust is None:
+            return True, "skipped (files not found)"
+        diff = set(addr["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff) == 0, f"0 orphan customer_ids ({addr.height} addresses checked)"
+    check("addresses.customer_id -> customers.customer_id", check_addresses_customer_fk)
 
-    console.print(f"\n[bold cyan]Validating Foreign Keys & Referential Integrity across 19 Tables:[/bold cyan]")
+    def check_customer_default_addresses():
+        addr = get_table("addresses")
+        if addr is None:
+            return True, "skipped"
+        defaults = addr.filter(pl.col("is_default") == True)
+        by_type = defaults.group_by(["customer_id", "address_type"]).len()
+        max_defaults = by_type["len"].max() if by_type.height > 0 else 0
+        return max_defaults <= 1, f"max {max_defaults} default address per customer/type"
+    check("customers default address uniqueness", check_customer_default_addresses)
 
-    # 1. Addresses
-    check_fk(addresses, "customer_id", customer_ids, "Addresses → Customers FK")
+    # --- Online Orders Checks ---
+    def check_orders_customer_fk():
+        ord_df = get_table("orders_online")
+        cust = get_table("customers")
+        if ord_df is None or cust is None:
+            return True, "skipped"
+        diff = set(ord_df["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff) == 0, f"0 orphan customer_ids ({ord_df.height} orders checked)"
+    check("orders_online.customer_id -> customers.customer_id", check_orders_customer_fk)
 
-    # 2. In-Store Accounts
-    check_fk(instore_accounts, "store_id", store_ids, "In-Store Accounts → Stores FK")
-    check_fk(instore_accounts, "customer_id", customer_ids, "In-Store Accounts → Customers FK (optional)", allow_null=True)
+    def check_orders_address_fk():
+        ord_df = get_table("orders_online")
+        addr = get_table("addresses")
+        if ord_df is None or addr is None:
+            return True, "skipped"
+        addr_ids = set(addr["address_id"].to_list())
+        diff_ship = set(ord_df["shipping_address_id"].to_list()) - addr_ids
+        diff_bill = set(ord_df["billing_address_id"].to_list()) - addr_ids
+        return len(diff_ship) == 0 and len(diff_bill) == 0, f"0 orphan shipping/billing address_ids"
+    check("orders_online address FKs -> addresses.address_id", check_orders_address_fk)
 
-    # 3. Online Orders & Line Items
-    check_fk(orders_online, "customer_id", customer_ids, "Online Orders → Customers FK")
-    check_fk(orders_online, "shipping_address_id", address_ids, "Online Orders → Shipping Addresses FK", allow_null=True)
-    check_fk(orders_online, "billing_address_id", address_ids, "Online Orders → Billing Addresses FK", allow_null=True)
-    check_fk(order_items_online, "order_id", online_order_ids, "Online Order Items → Online Orders FK")
-    check_fk(order_items_online, "product_id", product_ids, "Online Order Items → Products FK")
+    def check_order_items_fk():
+        items = get_table("order_items_online")
+        ord_df = get_table("orders_online")
+        prod = get_table("products")
+        if items is None or ord_df is None or prod is None:
+            return True, "skipped"
+        diff_order = set(items["order_id"].to_list()) - set(ord_df["order_id"].to_list())
+        diff_prod = set(items["product_id"].to_list()) - set(prod["product_id"].to_list())
+        return len(diff_order) == 0 and len(diff_prod) == 0, f"0 orphan order_ids, 0 orphan product_ids ({items.height} items)"
+    check("order_items_online FKs -> orders & products", check_order_items_fk)
 
-    # 4. In-Store Orders & Line Items
-    check_fk(orders_instore, "store_id", store_ids, "In-Store Orders → Stores FK")
-    check_fk(orders_instore, "customer_id", customer_ids, "In-Store Orders → Customers FK (optional)", allow_null=True)
-    check_fk(orders_instore, "instore_account_id", instore_account_ids, "In-Store Orders → In-Store Accounts FK (optional)", allow_null=True)
-    check_fk(order_items_instore, "transaction_id", instore_order_ids, "In-Store Order Items → In-Store Orders FK")
-    check_fk(order_items_instore, "product_id", product_ids, "In-Store Order Items → Products FK")
+    def check_order_totals():
+        ord_df = get_table("orders_online")
+        items = get_table("order_items_online")
+        if ord_df is None or items is None:
+            return True, "skipped"
+        item_sums = items.group_by("order_id").agg(pl.col("line_total").sum().alias("calc_subtotal"))
+        joined = ord_df.join(item_sums, on="order_id", how="left")
+        diff = (joined["subtotal"] - joined["calc_subtotal"]).abs().max()
+        return diff < 0.05, f"max subtotal discrepancy: ${diff:.4f}"
+    check("orders_online subtotal == sum(line_total)", check_order_totals)
 
-    # 5. Clickstream
-    check_fk(clickstream, "customer_id", customer_ids, "Clickstream Events → Customers FK (optional)", allow_null=True)
-    check_fk(clickstream, "product_id", product_ids, "Clickstream Events → Products FK (optional)", allow_null=True)
+    # --- In-Store Orders Checks ---
+    def check_instore_store_fk():
+        ord_df = get_table("orders_instore")
+        stores = get_table("stores")
+        if ord_df is None or stores is None:
+            return True, "skipped"
+        diff = set(ord_df["store_id"].to_list()) - set(stores["store_id"].to_list())
+        return len(diff) == 0, f"0 orphan store_ids ({ord_df.height} POS txns)"
+    check("orders_instore.store_id -> stores.store_id", check_instore_store_fk)
 
-    # 6. Email Marketing
-    check_fk(email_events, "customer_id", customer_ids, "Email Events → Customers FK")
-    check_fk(email_events, "campaign_id", campaign_ids, "Email Events → Campaigns FK")
+    def check_instore_customer_fk():
+        ord_df = get_table("orders_instore")
+        cust = get_table("customers")
+        if ord_df is None or cust is None:
+            return True, "skipped"
+        known = ord_df.filter(pl.col("customer_id").is_not_null())
+        if known.height == 0:
+            return True, "all guest purchases"
+        diff = set(known["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff) == 0, f"0 orphan customer_ids ({known.height} identified POS txns)"
+    check("orders_instore.customer_id -> customers.customer_id", check_instore_customer_fk)
 
-    # 7. Loyalty Program
-    check_fk(loyalty_members, "customer_id", customer_ids, "Loyalty Members → Customers FK")
-    check_fk(loyalty_members, "preferred_store_id", store_ids, "Loyalty Members → Preferred Stores FK", allow_null=True)
-    check_fk(loyalty_txns, "loyalty_id", loyalty_ids, "Loyalty Transactions → Loyalty Members FK")
+    def check_instore_items_fk():
+        items = get_table("order_items_instore")
+        ord_df = get_table("orders_instore")
+        prod = get_table("products")
+        if items is None or ord_df is None or prod is None:
+            return True, "skipped"
+        diff_txn = set(items["transaction_id"].to_list()) - set(ord_df["transaction_id"].to_list())
+        diff_prod = set(items["product_id"].to_list()) - set(prod["product_id"].to_list())
+        return len(diff_txn) == 0 and len(diff_prod) == 0, f"0 orphan transaction_ids, 0 orphan product_ids"
+    check("order_items_instore FKs -> orders & products", check_instore_items_fk)
 
-    # 8. Product Reviews
-    check_fk(reviews, "product_id", product_ids, "Reviews → Products FK")
-    check_fk(reviews, "customer_id", customer_ids, "Reviews → Customers FK")
-    check_fk(reviews, "order_id", online_order_ids, "Reviews → Online Orders FK (optional)", allow_null=True)
+    # --- Loyalty Checks ---
+    def check_loyalty_fk():
+        loy = get_table("loyalty_members")
+        cust = get_table("customers")
+        if loy is None or cust is None:
+            return True, "skipped"
+        diff = set(loy["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff) == 0, f"0 orphan customer_ids ({loy.height} loyalty members)"
+    check("loyalty_members.customer_id -> customers.customer_id", check_loyalty_fk)
 
-    # 9. Support Tickets
-    check_fk(support_tickets, "customer_id", customer_ids, "Support Tickets → Customers FK")
-    check_fk(support_tickets, "order_id", all_order_ids, "Support Tickets → Orders FK (optional)", allow_null=True)
+    def check_loyalty_txns_fk():
+        txns = get_table("loyalty_transactions")
+        loy = get_table("loyalty_members")
+        if txns is None or loy is None:
+            return True, "skipped"
+        diff = set(txns["loyalty_id"].to_list()) - set(loy["loyalty_id"].to_list())
+        return len(diff) == 0, f"0 orphan loyalty_ids ({txns.height} loyalty txns)"
+    check("loyalty_transactions.loyalty_id -> loyalty_members.loyalty_id", check_loyalty_txns_fk)
 
-    # 10. A/B Testing Experiments
-    check_fk(experiment_assignments, "experiment_id", experiment_ids, "Experiment Assignments → Experiments FK")
-    check_fk(experiment_assignments, "customer_id", customer_ids, "Experiment Assignments → Customers FK")
-    check_fk(experiment_assignments, "conversion_order_id", online_order_ids, "Experiment Assignments → Conversion Orders FK (optional)", allow_null=True)
+    # --- Support Tickets Checks ---
+    def check_support_fk():
+        tickets = get_table("support_tickets")
+        cust = get_table("customers")
+        if tickets is None or cust is None:
+            return True, "skipped"
+        diff = set(tickets["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff) == 0, f"0 orphan customer_ids ({tickets.height} tickets)"
+    check("support_tickets.customer_id -> customers.customer_id", check_support_fk)
 
-    # 11. Fraud Flags
-    check_fk(fraud_flags, "customer_id", customer_ids, "Fraud Flags → Customers FK")
+    # --- Reviews Checks ---
+    def check_reviews_fk():
+        rev = get_table("reviews")
+        cust = get_table("customers")
+        prod = get_table("products")
+        if rev is None or cust is None or prod is None:
+            return True, "skipped"
+        diff_cust = set(rev["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        diff_prod = set(rev["product_id"].to_list()) - set(prod["product_id"].to_list())
+        return len(diff_cust) == 0 and len(diff_prod) == 0, f"0 orphan customers, 0 orphan products"
+    check("reviews FKs -> customers & products", check_reviews_fk)
 
-    # Summary
+    # --- Experiment Assignments Checks ---
+    def check_experiments_fk():
+        assign = get_table("experiment_assignments")
+        exp = get_table("experiments")
+        cust = get_table("customers")
+        if assign is None or exp is None or cust is None:
+            return True, "skipped"
+        diff_exp = set(assign["experiment_id"].to_list()) - set(exp["experiment_id"].to_list())
+        diff_cust = set(assign["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff_exp) == 0 and len(diff_cust) == 0, f"0 orphan experiments, 0 orphan customers"
+    check("experiment_assignments FKs -> experiments & customers", check_experiments_fk)
+
+    # --- Fraud Flags Checks ---
+    def check_fraud_fk():
+        fraud = get_table("fraud_flags")
+        cust = get_table("customers")
+        if fraud is None or cust is None:
+            return True, "skipped"
+        diff = set(fraud["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff) == 0, f"0 orphan customer_ids ({fraud.height} flags)"
+    check("fraud_flags.customer_id -> customers.customer_id", check_fraud_fk)
+
     console.print()
     if errors:
         for e in errors:
@@ -315,6 +387,73 @@ def export_duckdb_cmd(
     from .duckdb_exporter import export_to_duckdb
 
     export_to_duckdb(data_dir=data_dir, output_db_path=output, create_views=views)
+
+
+@app.command(name="export")
+def export_cmd(
+    data_dir: str = typer.Argument(help="Path to generated data directory"),
+    target: str = typer.Option("duckdb", "--target", "-t", help="Target warehouse: duckdb, databricks, snowflake, bigquery"),
+    catalog: str = typer.Option(None, "--catalog", help="Databricks catalog name or Snowflake database"),
+    schema: str = typer.Option(None, "--schema", "-s", help="Schema or dataset name"),
+    database: str = typer.Option(None, "--database", help="Snowflake database or custom DuckDB file path"),
+    warehouse: str = typer.Option(None, "--warehouse", "-w", help="Snowflake warehouse or Databricks SQL Warehouse ID"),
+    project: str = typer.Option(None, "--project", "-p", help="Google Cloud project ID for BigQuery"),
+    dataset: str = typer.Option(None, "--dataset", "-d", help="BigQuery dataset name"),
+    stage: str = typer.Option(None, "--stage", "--volume", help="Target stage or UC volume name"),
+    profile: str = typer.Option(None, "--profile", help="Connection profile name (Databricks profile or Snowflake connection)"),
+    views: bool = typer.Option(True, "--views/--no-views", help="Create analytical views"),
+    verify: bool = typer.Option(True, "--verify/--no-verify", help="Verify row counts against manifest"),
+) -> None:
+    """Export generated Parquet dataset to DuckDB, Databricks, Snowflake, or BigQuery."""
+    from .exporters import (
+        BigQueryExporter,
+        DatabricksExporter,
+        DuckDBExporter,
+        ExportConfig,
+        SnowflakeExporter,
+    )
+
+    t = target.lower().strip()
+    extra_params = {}
+    if profile:
+        extra_params["profile"] = profile
+
+    config = ExportConfig(
+        target=t,
+        data_dir=data_dir,
+        catalog=catalog,
+        schema_name=schema,
+        database=database,
+        warehouse=warehouse,
+        project=project,
+        dataset=dataset,
+        stage_or_volume=stage,
+        create_views=views,
+        verify_counts=verify,
+        extra_params=extra_params,
+    )
+
+    if t == "duckdb":
+        exporter = DuckDBExporter(config)
+    elif t == "databricks":
+        exporter = DatabricksExporter(config)
+    elif t == "snowflake":
+        exporter = SnowflakeExporter(config)
+    elif t == "bigquery":
+        exporter = BigQueryExporter(config)
+    else:
+        console.print(
+            f"[red]Error: Unknown export target '{target}'. "
+            f"Valid targets: duckdb, databricks, snowflake, bigquery[/red]"
+        )
+        raise typer.Exit(1)
+
+    try:
+        exporter.export()
+    except (ImportError, ValueError, RuntimeError) as e:
+        from rich.markup import escape
+        console.print(f"\n[red]Export Error:[/red] {escape(str(e))}")
+        raise typer.Exit(1)
 
 
 @app.command()

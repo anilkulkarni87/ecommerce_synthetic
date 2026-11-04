@@ -84,6 +84,22 @@ ecommerce-synth stream ./output/test_run --json --speed 0 | jq .
 ecommerce-synth stream ./output/test_run --webhook http://localhost:8080/api/events
 ```
 
+### 8. Multi-Warehouse Export (Databricks, Snowflake, BigQuery, DuckDB)
+Automate staging, table creation with constraints, column descriptions, and analytical views:
+```bash
+# Export to Databricks Unity Catalog (UC Volumes staging + Delta tables)
+ecommerce-synth export ./output/test_run --target databricks --catalog my_catalog --schema ecommerce
+
+# Export to Snowflake (Internal stage staging + COPY INTO)
+ecommerce-synth export ./output/test_run --target snowflake --database MY_DB --schema ECOMMERCE
+
+# Export to Google Cloud BigQuery (Direct / GCS staging + LoadJob)
+ecommerce-synth export ./output/test_run --target bigquery --project my-project-id --dataset ecommerce
+
+# Export to portable DuckDB
+ecommerce-synth export ./output/test_run --target duckdb --database ./output/test_run/ecommerce.duckdb
+```
+
 ---
 
 ## Key Table Relationships (The 19 Tables)

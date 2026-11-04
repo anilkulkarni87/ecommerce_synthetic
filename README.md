@@ -42,8 +42,14 @@ cd ecommerce_synthetic
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install in editable mode
+# Install core package
 pip install -e ".[dev]"
+
+# Or install with cloud warehouse connectors:
+pip install -e ".[databricks]"  # Databricks Unity Catalog
+pip install -e ".[snowflake]"   # Snowflake
+pip install -e ".[bigquery]"    # Google BigQuery
+pip install -e ".[all-targets]" # All warehouse destinations
 ```
 
 ### Basic Generation
@@ -85,7 +91,33 @@ ecommerce-synth preview ./output/small_<timestamp>/ customers --limit 10
 ecommerce-synth inspect ./output/small_<timestamp>/ clickstream -n 3
 ```
 
-### 🦆 Instant DuckDB SQL Bundle
+### 🏛️ Multi-Warehouse Exporters (Databricks, Snowflake, BigQuery, DuckDB)
+
+The generator includes a fully automated **Two-Stage Staging + Bulk Load** exporter framework that loads all 19 tables, establishes primary/foreign key constraints, applies data dictionary column comments, and deploys analytical views (`v_omnichannel_sales`, `v_customer_360`):
+
+```bash
+# 🦆 Export to DuckDB (portable local database file)
+ecommerce-synth export ./output/small_<timestamp>/ --target duckdb
+
+# 🧱 Export to Databricks Unity Catalog (UC Volumes staging + Delta tables)
+ecommerce-synth export ./output/small_<timestamp>/ --target databricks \
+  --catalog dev_catalog --schema ecommerce_synth [--warehouse <warehouse_id>]
+
+# ❄️ Export to Snowflake (Internal Stage staging + COPY INTO)
+ecommerce-synth export ./output/small_<timestamp>/ --target snowflake \
+  --database ANALYTICS_DB --schema ECOMMERCE [--warehouse COMPUTE_WH]
+
+# ⚡ Export to Google Cloud BigQuery (Direct / GCS staging + Native Load Jobs)
+ecommerce-synth export ./output/small_<timestamp>/ --target bigquery \
+  --project my-gcp-project --dataset ecommerce_synth
+
+# 🚀 One-Step Generation + Immediate Warehouse Export
+ecommerce-synth generate --tier small --export databricks --catalog main --schema ecommerce
+```
+
+Connection configuration is auto-discovered via standard environment variables and profiles (`~/.databrickscfg`, `~/.snowflake/config.toml`, or `gcloud ADC`).
+
+### 🦆 Instant DuckDB SQL Bundle (Shortcut)
 
 Generate a standalone, zero-setup `ecommerce.duckdb` database preloaded with all 19 tables and analytical views (`v_omnichannel_sales`, `v_customer_360`):
 
