@@ -56,6 +56,13 @@ class DatabricksExporter(BaseExporter):
                 self._client = WorkspaceClient(profile=self.profile)
             else:
                 self._client = WorkspaceClient()
+
+            # Optimize multipart upload threshold so files >= 5MB use presigned cloud storage uploads
+            if hasattr(self._client, "config") and hasattr(self._client.config, "files_ext_multipart_upload_min_stream_size"):
+                try:
+                    self._client.config.files_ext_multipart_upload_min_stream_size = 5 * 1024 * 1024
+                except Exception:
+                    pass
         return self._client
 
     def _execute_sql(self, statement: str) -> Any:
@@ -92,8 +99,15 @@ class DatabricksExporter(BaseExporter):
 
         for pf in self.config.parquet_files:
             volume_file_path = f"/Volumes/{self.catalog}/{self.schema_name}/{self.volume_name}/{pf.name}"
-            with open(pf, "rb") as f:
-                w.files.upload(volume_file_path, f, overwrite=True)
+            local_path = str(pf.resolve())
+
+            # Use upload_from for direct file upload with multipart & presigned URL support
+            if hasattr(w.files, "upload_from"):
+                w.files.upload_from(volume_file_path, local_path, overwrite=True)
+            else:
+                with open(pf, "rb") as f:
+                    w.files.upload(volume_file_path, f, overwrite=True)
+
             staged_paths.append(volume_file_path)
             console.print(f"  ✓ Staged [green]{pf.name}[/green]")
 

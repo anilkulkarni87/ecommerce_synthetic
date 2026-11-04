@@ -87,8 +87,11 @@ def test_databricks_export_mocked(sample_data_dir: Path) -> None:
     assert result.total_rows == 2
 
     # Verify upload was called for customers.parquet
-    assert mock_client.files.upload.called
-    uploaded_path = mock_client.files.upload.call_args[0][0]
+    assert mock_client.files.upload_from.called or mock_client.files.upload.called
+    if mock_client.files.upload_from.called:
+        uploaded_path = mock_client.files.upload_from.call_args[0][0]
+    else:
+        uploaded_path = mock_client.files.upload.call_args[0][0]
     assert uploaded_path == "/Volumes/main/ecommerce_test/ecommerce_raw/customers.parquet"
 
     # Verify SQL statements executed
