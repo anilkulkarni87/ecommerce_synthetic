@@ -209,7 +209,12 @@ class SnowflakeExporter(BaseExporter):
         )
 
         try:
-            # 1. Initialize schema and stage
+            # 1. Initialize database, schema and stage
+            try:
+                self._execute_sql(f"CREATE DATABASE IF NOT EXISTS {self.database};")
+            except Exception:
+                pass
+
             self._execute_sql(f"CREATE SCHEMA IF NOT EXISTS {self.database}.{self.schema_name};")
             stage_qual = f"{self.database}.{self.schema_name}.{self.stage_name}"
             self._execute_sql(f"CREATE STAGE IF NOT EXISTS {stage_qual};")

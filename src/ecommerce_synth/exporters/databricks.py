@@ -228,7 +228,13 @@ class DatabricksExporter(BaseExporter):
             f"{self.catalog}.{self.schema_name}"
         )
 
-        # 1. Initialize schema and volume
+        # 1. Initialize catalog, schema, and volume
+        try:
+            self._execute_sql(f"CREATE CATALOG IF NOT EXISTS {self.catalog};")
+        except Exception:
+            # Metastore-level CREATE CATALOG privilege may not be granted if catalog already exists
+            pass
+
         self._execute_sql(f"CREATE SCHEMA IF NOT EXISTS {self.catalog}.{self.schema_name};")
         self._execute_sql(f"CREATE VOLUME IF NOT EXISTS {self.catalog}.{self.schema_name}.{self.volume_name};")
 
