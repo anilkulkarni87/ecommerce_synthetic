@@ -1,6 +1,12 @@
 # 🛒 Ecommerce Synthetic Data Generator
 
+[![GitHub Pages](https://img.shields.io/badge/Docs-GitHub%20Pages-indigo?style=flat&logo=github)](https://anilkulkarni87.github.io/ecommerce_synthetic/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=flat&logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+
 A realistic, referentially-intact omnichannel synthetic ecommerce data generator capable of producing datasets at multiple volume tiers (Small to XL) formatted as Snappy-compressed **Apache Parquet** files.
+
+🌐 **Interactive Documentation & Schema Explorer:** [https://anilkulkarni87.github.io/ecommerce_synthetic/](https://anilkulkarni87.github.io/ecommerce_synthetic/)
 
 ---
 
