@@ -118,6 +118,36 @@ class SnowflakeExporter(BaseExporter):
                     encryption_algorithm=serialization.NoEncryption(),
                 )
 
+            def _connect(kwargs: dict[str, Any]) -> Any:
+                kwargs.setdefault("client_request_mfa_token", True)
+                kwargs.setdefault("client_store_temporary_credential", True)
+                try:
+                    return snowflake.connector.connect(**kwargs)
+                except Exception as e:
+                    err_msg = str(e)
+                    # Check for MFA / passcode requirement
+                    is_mfa_error = (
+                        "Internal error" in err_msg
+                        or "Multi-factor authentication" in err_msg
+                        or "250001" in err_msg
+                    )
+                    if is_mfa_error and not kwargs.get("passcode"):
+                        import sys
+                        if sys.stdin.isatty():
+                            import getpass
+                            try:
+                                prompted_code = getpass.getpass("Enter Snowflake MFA 6-digit passcode (TOTP): ").strip()
+                                if prompted_code:
+                                    kwargs["passcode"] = prompted_code
+                                    return snowflake.connector.connect(**kwargs)
+                            except Exception:
+                                pass
+                        raise RuntimeError(
+                            "Snowflake MFA passcode required. Please supply your 6-digit TOTP authenticator code "
+                            "using `--passcode <code>` (e.g. `--passcode 123456`) or export `SNOWFLAKE_PASSCODE=<code>`."
+                        ) from e
+                    raise
+
             conn_name = self._discover_connection_name()
             if conn_name:
                 conn_kwargs: dict[str, Any] = {
@@ -135,7 +165,7 @@ class SnowflakeExporter(BaseExporter):
                     conn_kwargs["passcode"] = passcode
                 if private_key_bytes:
                     conn_kwargs["private_key"] = private_key_bytes
-                self._conn = snowflake.connector.connect(**conn_kwargs)
+                self._conn = _connect(conn_kwargs)
             else:
                 account = self.config.extra_params.get("account") or os.getenv("SNOWFLAKE_ACCOUNT")
                 user = self.config.extra_params.get("user") or os.getenv("SNOWFLAKE_USER")
@@ -162,7 +192,7 @@ class SnowflakeExporter(BaseExporter):
                 if private_key_bytes:
                     conn_kwargs["private_key"] = private_key_bytes
 
-                self._conn = snowflake.connector.connect(**conn_kwargs)
+                self._conn = _connect(conn_kwargs)
 
         return self._conn
 
