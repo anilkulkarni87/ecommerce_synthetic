@@ -29,6 +29,27 @@ class SnowflakeExporter(BaseExporter):
         self.ddl_gen = DDLGenerator()
         self._conn: Any = None
 
+    def _discover_connection_name(self) -> str | None:
+        """Find default or available connection name from ~/.snowflake/connections.toml or config.toml."""
+        if self.connection_name:
+            return self.connection_name
+
+        try:
+            from snowflake.connector.config_manager import CONFIG_MANAGER
+            conns = CONFIG_MANAGER.get("connections", {})
+            if not conns:
+                return None
+            conn_keys = list(conns.keys())
+            if "default" in conn_keys:
+                return "default"
+            if "defautlt" in conn_keys:  # common typo fallback
+                return "defautlt"
+            if len(conn_keys) == 1:
+                return conn_keys[0]
+        except Exception:
+            pass
+        return None
+
     def validate_prerequisites(self) -> None:
         """Check for snowflake-connector-python and required target parameters."""
         try:
@@ -48,25 +69,56 @@ class SnowflakeExporter(BaseExporter):
                 "Snowflake schema name is required. Specify via --schema <schema_name>."
             )
 
+        conn_name = self._discover_connection_name()
+        has_env_auth = bool(
+            self.config.extra_params.get("user")
+            or os.getenv("SNOWFLAKE_USER")
+            or (self.config.extra_params.get("account") and self.config.extra_params.get("password"))
+        )
+
+        if not conn_name and not has_env_auth:
+            available_conns = []
+            try:
+                from snowflake.connector.config_manager import CONFIG_MANAGER
+                available_conns = list(CONFIG_MANAGER.get("connections", {}).keys())
+            except Exception:
+                pass
+
+            if available_conns:
+                conn_list = ", ".join(f"'{c}'" for c in available_conns)
+                raise ValueError(
+                    f"Snowflake credentials not specified. Available connections in ~/.snowflake/connections.toml: "
+                    f"[{conn_list}]. Specify one via --profile <name> (e.g. --profile {available_conns[0]}), "
+                    f"or set SNOWFLAKE_USER and SNOWFLAKE_ACCOUNT."
+                )
+            else:
+                raise ValueError(
+                    "Snowflake credentials not found. Please provide --profile <connection_name>, "
+                    "or set environment variables SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, and SNOWFLAKE_PASSWORD."
+                )
+
     def _get_connection(self) -> Any:
         """Lazy-initialize and return Snowflake connection."""
         if self._conn is None:
             import snowflake.connector
 
-            if self.connection_name:
-                self._conn = snowflake.connector.connect(
-                    connection_name=self.connection_name,
-                    database=self.database,
-                    schema=self.schema_name,
-                    warehouse=self.warehouse,
-                )
+            conn_name = self._discover_connection_name()
+            if conn_name:
+                conn_kwargs: dict[str, Any] = {
+                    "connection_name": conn_name,
+                    "database": self.database,
+                    "schema": self.schema_name,
+                }
+                if self.warehouse:
+                    conn_kwargs["warehouse"] = self.warehouse
+                self._conn = snowflake.connector.connect(**conn_kwargs)
             else:
                 account = self.config.extra_params.get("account") or os.getenv("SNOWFLAKE_ACCOUNT")
                 user = self.config.extra_params.get("user") or os.getenv("SNOWFLAKE_USER")
                 password = self.config.extra_params.get("password") or os.getenv("SNOWFLAKE_PASSWORD")
                 role = self.config.extra_params.get("role") or os.getenv("SNOWFLAKE_ROLE")
 
-                conn_kwargs: dict[str, Any] = {
+                conn_kwargs = {
                     "database": self.database,
                     "schema": self.schema_name,
                 }

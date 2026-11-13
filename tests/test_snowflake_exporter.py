@@ -90,3 +90,48 @@ def test_snowflake_export_mocked(sample_data_dir: Path) -> None:
     assert any("CREATE TABLE IF NOT EXISTS ANALYTICS_DB.ECOMMERCE.customers" in q for q in executed_queries)
     assert any("COPY INTO ANALYTICS_DB.ECOMMERCE.customers" in q for q in executed_queries)
 
+
+def test_snowflake_discover_connection_name(sample_data_dir: Path) -> None:
+    config = ExportConfig(
+        target="snowflake",
+        data_dir=sample_data_dir,
+        database="MY_DB",
+        schema_name="MY_SCHEMA",
+    )
+    exporter = SnowflakeExporter(config)
+
+    # 1. When explicit profile is provided
+    exporter.connection_name = "custom_profile"
+    assert exporter._discover_connection_name() == "custom_profile"
+
+    # Mock snowflake.connector.config_manager.CONFIG_MANAGER
+    exporter.connection_name = None
+    mock_cm_mod = MagicMock()
+    mock_connector_mod = MagicMock()
+    mock_connector_mod.config_manager = mock_cm_mod
+    mock_snow = MagicMock()
+    mock_snow.connector = mock_connector_mod
+
+    # 2. When config_manager has 'default'
+    mock_cm_mod.CONFIG_MANAGER.get.return_value = {"default": {"user": "u1"}}
+    with patch.dict(sys.modules, {
+        "snowflake": mock_snow,
+        "snowflake.connector": mock_connector_mod,
+        "snowflake.connector.config_manager": mock_cm_mod,
+    }):
+        assert exporter._discover_connection_name() == "default"
+
+        # 3. When config_manager has typo 'defautlt'
+        mock_cm_mod.CONFIG_MANAGER.get.return_value = {"defautlt": {"user": "u1"}, "other": {}}
+        assert exporter._discover_connection_name() == "defautlt"
+
+        # 4. When single connection exists
+        mock_cm_mod.CONFIG_MANAGER.get.return_value = {"my_prod_conn": {"user": "u1"}}
+        assert exporter._discover_connection_name() == "my_prod_conn"
+
+        # 5. When no connections exist
+        mock_cm_mod.CONFIG_MANAGER.get.return_value = {}
+        assert exporter._discover_connection_name() is None
+
+
+
