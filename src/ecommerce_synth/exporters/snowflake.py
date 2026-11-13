@@ -104,6 +104,19 @@ class SnowflakeExporter(BaseExporter):
 
             authenticator = self.config.extra_params.get("authenticator") or os.getenv("SNOWFLAKE_AUTHENTICATOR")
             role = self.config.extra_params.get("role") or os.getenv("SNOWFLAKE_ROLE")
+            passcode = self.config.extra_params.get("passcode") or os.getenv("SNOWFLAKE_PASSCODE")
+            private_key_file = self.config.extra_params.get("private_key_file") or os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
+
+            private_key_bytes = None
+            if private_key_file and os.path.exists(private_key_file):
+                from cryptography.hazmat.primitives import serialization
+                with open(private_key_file, "rb") as kf:
+                    p_key = serialization.load_pem_private_key(kf.read(), password=None)
+                private_key_bytes = p_key.private_bytes(
+                    encoding=serialization.Encoding.DER,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption(),
+                )
 
             conn_name = self._discover_connection_name()
             if conn_name:
@@ -118,6 +131,10 @@ class SnowflakeExporter(BaseExporter):
                     conn_kwargs["role"] = role
                 if authenticator:
                     conn_kwargs["authenticator"] = authenticator
+                if passcode:
+                    conn_kwargs["passcode"] = passcode
+                if private_key_bytes:
+                    conn_kwargs["private_key"] = private_key_bytes
                 self._conn = snowflake.connector.connect(**conn_kwargs)
             else:
                 account = self.config.extra_params.get("account") or os.getenv("SNOWFLAKE_ACCOUNT")
@@ -140,6 +157,10 @@ class SnowflakeExporter(BaseExporter):
                     conn_kwargs["role"] = role
                 if authenticator:
                     conn_kwargs["authenticator"] = authenticator
+                if passcode:
+                    conn_kwargs["passcode"] = passcode
+                if private_key_bytes:
+                    conn_kwargs["private_key"] = private_key_bytes
 
                 self._conn = snowflake.connector.connect(**conn_kwargs)
 
