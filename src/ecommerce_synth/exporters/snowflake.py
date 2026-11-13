@@ -102,6 +102,9 @@ class SnowflakeExporter(BaseExporter):
         if self._conn is None:
             import snowflake.connector
 
+            authenticator = self.config.extra_params.get("authenticator") or os.getenv("SNOWFLAKE_AUTHENTICATOR")
+            role = self.config.extra_params.get("role") or os.getenv("SNOWFLAKE_ROLE")
+
             conn_name = self._discover_connection_name()
             if conn_name:
                 conn_kwargs: dict[str, Any] = {
@@ -111,12 +114,15 @@ class SnowflakeExporter(BaseExporter):
                 }
                 if self.warehouse:
                     conn_kwargs["warehouse"] = self.warehouse
+                if role:
+                    conn_kwargs["role"] = role
+                if authenticator:
+                    conn_kwargs["authenticator"] = authenticator
                 self._conn = snowflake.connector.connect(**conn_kwargs)
             else:
                 account = self.config.extra_params.get("account") or os.getenv("SNOWFLAKE_ACCOUNT")
                 user = self.config.extra_params.get("user") or os.getenv("SNOWFLAKE_USER")
                 password = self.config.extra_params.get("password") or os.getenv("SNOWFLAKE_PASSWORD")
-                role = self.config.extra_params.get("role") or os.getenv("SNOWFLAKE_ROLE")
 
                 conn_kwargs = {
                     "database": self.database,
@@ -132,6 +138,8 @@ class SnowflakeExporter(BaseExporter):
                     conn_kwargs["warehouse"] = self.warehouse
                 if role:
                     conn_kwargs["role"] = role
+                if authenticator:
+                    conn_kwargs["authenticator"] = authenticator
 
                 self._conn = snowflake.connector.connect(**conn_kwargs)
 

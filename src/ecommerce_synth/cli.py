@@ -401,6 +401,8 @@ def export_cmd(
     dataset: str = typer.Option(None, "--dataset", "-d", help="BigQuery dataset name"),
     stage: str = typer.Option(None, "--stage", "--volume", help="Target stage or UC volume name"),
     profile: str = typer.Option(None, "--profile", help="Connection profile name (Databricks profile or Snowflake connection)"),
+    role: str = typer.Option(None, "--role", help="Role name (Snowflake role)"),
+    authenticator: str = typer.Option(None, "--authenticator", help="Authenticator method (e.g. externalbrowser for Snowflake SSO)"),
     views: bool = typer.Option(True, "--views/--no-views", help="Create analytical views"),
     verify: bool = typer.Option(True, "--verify/--no-verify", help="Verify row counts against manifest"),
 ) -> None:
@@ -417,6 +419,10 @@ def export_cmd(
     extra_params = {}
     if profile:
         extra_params["profile"] = profile
+    if role:
+        extra_params["role"] = role
+    if authenticator:
+        extra_params["authenticator"] = authenticator
 
     config = ExportConfig(
         target=t,
