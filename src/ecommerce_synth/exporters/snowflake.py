@@ -237,6 +237,7 @@ class SnowflakeExporter(BaseExporter):
                 dialect="snowflake",
                 catalog_or_project=self.database,  # type: ignore[arg-type]
                 schema_or_dataset=self.schema_name,  # type: ignore[arg-type]
+                replace=True,
             )
             self._execute_sql(create_sql)
 

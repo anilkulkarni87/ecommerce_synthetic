@@ -271,7 +271,7 @@
       "columns": {
         "loyalty_txn_id": { "type": "string (UUID)", "nullable": false, "description": "Ledger entry primary key" },
         "loyalty_id": { "type": "string", "nullable": false, "description": "FK to loyalty_members" },
-        "transaction_date": { "type": "timestamp", "nullable": false, "description": "Transaction timestamp" },
+        "transaction_date": { "type": "date", "nullable": false, "description": "Transaction date" },
         "transaction_type": { "type": "string", "nullable": false, "description": "earn, redeem, expire, bonus, tier_bonus" },
         "points": { "type": "integer", "nullable": false, "description": "Point change (positive for earn, negative for redeem)" },
         "source_order_id": { "type": "string (UUID)", "nullable": true, "description": "FK to qualifying order if purchase-linked" },
@@ -295,7 +295,7 @@
         "rating": { "type": "integer", "nullable": false, "description": "Star rating (1 to 5)" },
         "title": { "type": "string", "nullable": false, "description": "Review title" },
         "body": { "type": "string", "nullable": false, "description": "Review commentary text" },
-        "created_at": { "type": "timestamp", "nullable": false, "description": "Post timestamp" },
+        "created_at": { "type": "date", "nullable": false, "description": "Post date" },
         "is_verified_purchase": { "type": "boolean", "nullable": false, "description": "Verified buyer flag" },
         "helpful_votes": { "type": "integer", "nullable": false, "description": "Helpful reaction count" }
       }
@@ -354,7 +354,7 @@
         "experiment_id": { "type": "string", "nullable": false, "description": "FK to experiments" },
         "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
         "variant": { "type": "string", "nullable": false, "description": "control, treatment_a, treatment_b" },
-        "assigned_at": { "type": "timestamp", "nullable": false, "description": "Assignment timestamp" },
+        "assigned_at": { "type": "date", "nullable": false, "description": "Assignment date" },
         "converted": { "type": "boolean", "nullable": false, "description": "Conversion indicator" },
         "conversion_order_id": { "type": "string (UUID)", "nullable": true, "description": "FK to conversion order" },
         "conversion_value": { "type": "float", "nullable": true, "description": "Revenue value generated" }

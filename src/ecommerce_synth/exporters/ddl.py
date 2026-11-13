@@ -74,6 +74,7 @@ class DDLGenerator:
         dialect: str,
         catalog_or_project: str,
         schema_or_dataset: str,
+        replace: bool = False,
     ) -> str:
         """Generate CREATE TABLE DDL with columns, types, nullability, and primary key."""
         table_meta = self.tables.get(table_name)
@@ -109,11 +110,12 @@ class DDLGenerator:
                 col_defs.append(f"  PRIMARY KEY (`{pk_col}`) NOT ENFORCED")
 
         cols_body = ",\n".join(col_defs)
+        create_clause = "CREATE OR REPLACE TABLE" if replace else "CREATE TABLE IF NOT EXISTS"
 
         if d == "databricks":
             qual = f"{catalog_or_project}.{schema_or_dataset}.{table_name}"
             return (
-                f"CREATE TABLE IF NOT EXISTS {qual} (\n"
+                f"{create_clause} {qual} (\n"
                 f"{cols_body}\n"
                 f")\n"
                 f"COMMENT '{table_desc}';"
@@ -121,7 +123,7 @@ class DDLGenerator:
         elif d == "snowflake":
             qual = f"{catalog_or_project}.{schema_or_dataset}.{table_name}"
             return (
-                f"CREATE TABLE IF NOT EXISTS {qual} (\n"
+                f"{create_clause} {qual} (\n"
                 f"{cols_body}\n"
                 f")\n"
                 f"COMMENT = '{table_desc}';"
@@ -129,7 +131,7 @@ class DDLGenerator:
         elif d == "bigquery":
             qual = f"{catalog_or_project}.{schema_or_dataset}.{table_name}"
             return (
-                f"CREATE TABLE IF NOT EXISTS `{qual}` (\n"
+                f"{create_clause} `{qual}` (\n"
                 f"{cols_body}\n"
                 f")\n"
                 f"OPTIONS(description='{table_desc}');"

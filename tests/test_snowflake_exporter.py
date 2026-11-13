@@ -87,7 +87,7 @@ def test_snowflake_export_mocked(sample_data_dir: Path) -> None:
     assert any("CREATE SCHEMA IF NOT EXISTS ANALYTICS_DB.ECOMMERCE;" in q for q in executed_queries)
     assert any("CREATE STAGE IF NOT EXISTS ANALYTICS_DB.ECOMMERCE.ecommerce_stage;" in q for q in executed_queries)
     assert any("PUT file://" in q for q in executed_queries)
-    assert any("CREATE TABLE IF NOT EXISTS ANALYTICS_DB.ECOMMERCE.customers" in q for q in executed_queries)
+    assert any("CREATE OR REPLACE TABLE ANALYTICS_DB.ECOMMERCE.customers" in q for q in executed_queries)
     assert any("COPY INTO ANALYTICS_DB.ECOMMERCE.customers" in q for q in executed_queries)
 
 
