@@ -6,6 +6,7 @@ and 1-3 addresses per customer (billing + shipping).
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 
 import polars as pl
@@ -13,6 +14,17 @@ import polars as pl
 from ..persona import CustomerPersona, PersonaEngine
 from ..utils.temporal import random_timestamp_in_range
 from .base import BaseGenerator
+
+
+NICKNAME_MAP = {
+    "robert": "bob", "william": "bill", "james": "jim", "john": "jack",
+    "michael": "mike", "david": "dave", "richard": "rick", "joseph": "joe",
+    "thomas": "tom", "charles": "charlie", "christopher": "chris",
+    "daniel": "dan", "matthew": "matt", "anthony": "tony", "andrew": "andy",
+    "jennifer": "jen", "elizabeth": "liz", "katherine": "kate",
+    "margaret": "maggie", "patricia": "pat", "stephanie": "steph",
+    "rebecca": "becca", "samantha": "sam", "alexandra": "alex",
+}
 
 
 # Gender distribution (US Census approximation)
@@ -44,10 +56,13 @@ class CustomerGenerator(BaseGenerator):
     def generate(self, **deps) -> dict[str, pl.DataFrame]:
         n = self.config.tier.customers
         persona_engine = PersonaEngine(self.config, self.rng)
+        identity_noise = getattr(self.config, "identity_noise", 0.0) or 0.0
 
         customers: list[dict] = []
         addresses: list[dict] = []
         personas: list[CustomerPersona] = []
+        ground_truth: list[dict] = []
+        canonical_pool: list[tuple[dict, dict]] = []
 
         states = [s for s, _ in US_STATES_WEIGHTED]
         state_weights = [w for _, w in US_STATES_WEIGHTED]
@@ -56,6 +71,32 @@ class CustomerGenerator(BaseGenerator):
             cust_id = self._uuid()
             persona = persona_engine.assign(i, n)
             personas.append(persona)
+
+            if identity_noise > 0 and canonical_pool and self.rng.random() < identity_noise:
+                orig_cust, orig_addr = self.rng.choice(canonical_pool)
+                mutated_cust, mutated_addr, noise_type = self._mutate_identity(
+                    cust_id, orig_cust, orig_addr, persona
+                )
+                customers.append(mutated_cust)
+                ground_truth.append({
+                    "customer_id": cust_id,
+                    "true_entity_id": orig_cust["customer_id"],
+                    "is_duplicate": True,
+                    "noise_type": noise_type,
+                })
+                for addr_type in ["billing", "shipping"]:
+                    addresses.append({
+                        "address_id": self._uuid(),
+                        "customer_id": cust_id,
+                        "address_type": addr_type,
+                        "street_address": mutated_addr["street_address"],
+                        "city": mutated_addr["city"],
+                        "state": mutated_addr["state"],
+                        "zip_code": mutated_addr["zip_code"],
+                        "country": "US",
+                        "is_default": True,
+                    })
+                continue
 
             # Demographics
             gender = self._pick_weighted(GENDERS, GENDER_WEIGHTS)
@@ -101,7 +142,7 @@ class CustomerGenerator(BaseGenerator):
             if persona.persona_name == "one_and_done" and self.rng.random() < 0.5:
                 is_active = False
 
-            customers.append({
+            cust_row = {
                 "customer_id": cust_id,
                 "first_name": first_name,
                 "last_name": last_name,
@@ -113,13 +154,29 @@ class CustomerGenerator(BaseGenerator):
                 "channel_acquired": channel,
                 "is_active": is_active,
                 "customer_segment": persona.customer_segment,
-            })
+            }
+            customers.append(cust_row)
 
             # Addresses: 1-3 per customer
             state = self._pick_weighted(states, state_weights)
             city = self.faker.city()
             street = self.faker.street_address()
             zip_code = self.faker.zipcode_in_state(state)
+
+            primary_addr = {
+                "street_address": street,
+                "city": city,
+                "state": state,
+                "zip_code": zip_code,
+            }
+            if identity_noise > 0:
+                canonical_pool.append((cust_row, primary_addr))
+                ground_truth.append({
+                    "customer_id": cust_id,
+                    "true_entity_id": cust_id,
+                    "is_duplicate": False,
+                    "noise_type": "none",
+                })
 
             # Primary billing+shipping (same address for most)
             for addr_type in ["billing", "shipping"]:
@@ -181,7 +238,97 @@ class CustomerGenerator(BaseGenerator):
             customers[i]["customer_id"]: personas[i] for i in range(n)
         }
 
-        return {
+        result: dict[str, pl.DataFrame] = {
             "customers": customers_df,
             "addresses": addresses_df,
         }
+
+        if identity_noise > 0:
+            result["identity_ground_truth"] = pl.DataFrame(ground_truth).cast({
+                "is_duplicate": pl.Boolean,
+            })
+
+        return result
+
+    def _mutate_identity(
+        self,
+        new_cust_id: str,
+        orig_cust: dict,
+        orig_addr: dict,
+        persona: CustomerPersona,
+    ) -> tuple[dict, dict, str]:
+        """Create a realistic duplicate customer profile with entity-resolution noise."""
+        noise_type = self.rng.choice([
+            "email_alias", "phone_format", "nickname_typo", "household_split"
+        ])
+
+        first_name = orig_cust["first_name"]
+        last_name = orig_cust["last_name"]
+        email = orig_cust["email"]
+        phone = orig_cust["phone"]
+        dob = orig_cust["date_of_birth"]
+        street = orig_addr["street_address"]
+
+        if noise_type == "email_alias":
+            local, domain = email.split("@", 1)
+            if domain == "gmail.com" and self.rng.random() < 0.5:
+                email = f"{local}@googlemail.com"
+            else:
+                email = f"{local}+shop@{domain}"
+        elif noise_type == "phone_format":
+            digits = re.sub(r"\D", "", phone)[-10:]
+            if len(digits) == 10:
+                fmt = self.rng.choice(["dashed", "parens", "e164", "dots"])
+                if fmt == "dashed":
+                    phone = f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+                elif fmt == "parens":
+                    phone = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+                elif fmt == "e164":
+                    phone = f"+1{digits}"
+                else:
+                    phone = f"{digits[:3]}.{digits[3:6]}.{digits[6:]}"
+            street = re.sub(r"\bStreet\b", "St", street)
+            street = re.sub(r"\bAvenue\b", "Ave", street)
+        elif noise_type == "nickname_typo":
+            nick = NICKNAME_MAP.get(first_name.lower())
+            if nick:
+                first_name = nick.capitalize()
+            elif len(first_name) >= 4:
+                # Adjacent character swap typo
+                idx = self.rng.randint(1, len(first_name) - 2)
+                chars = list(first_name)
+                chars[idx], chars[idx + 1] = chars[idx + 1], chars[idx]
+                first_name = "".join(chars)
+            email = f"{first_name.lower()}.{last_name.lower()}{self.rng.randint(1, 99)}@gmail.com"
+        elif noise_type == "household_split":
+            # Same last name, phone, and address, but different email
+            email = f"{first_name.lower()}_{last_name.lower()}{self.rng.randint(10, 99)}@outlook.com"
+
+        created_at = random_timestamp_in_range(
+            self.rng,
+            self.config.date_range.start,
+            self.config.date_range.end,
+            channel="online",
+            config=self.config,
+        )
+
+        mutated_cust = {
+            "customer_id": new_cust_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "phone": phone,
+            "date_of_birth": dob,
+            "gender": orig_cust["gender"],
+            "created_at": created_at,
+            "channel_acquired": self._pick_weighted(ACQUISITION_CHANNELS, ACQUISITION_WEIGHTS),
+            "is_active": True,
+            "customer_segment": persona.customer_segment,
+        }
+        mutated_addr = {
+            "street_address": street,
+            "city": orig_addr["city"],
+            "state": orig_addr["state"],
+            "zip_code": orig_addr["zip_code"],
+        }
+        return mutated_cust, mutated_addr, noise_type

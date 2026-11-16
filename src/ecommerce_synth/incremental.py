@@ -267,6 +267,7 @@ class IncrementalGenerator:
         delta_clickstream = click_gen.generate(
             customers=combined_customers,
             products=products,
+            orders_online=delta_orders_online,
         )
 
         # Email in this window

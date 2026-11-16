@@ -84,3 +84,39 @@ def test_fraud_flags_fk(generated_dataset: Path):
     customer_ids = set(customers["customer_id"].to_list())
     for cid in fraud_flags["customer_id"].to_list():
         assert cid in customer_ids, f"Fraud flag customer_id {cid} not found in customers"
+
+
+def test_clickstream_order_session_linking(generated_dataset: Path):
+    orders_online = pl.read_parquet(generated_dataset / "orders_online.parquet")
+    clickstream = pl.read_parquet(generated_dataset / "clickstream.parquet")
+
+    click_sessions = set(clickstream["session_id"].to_list())
+    purchase_sessions = set(
+        clickstream.filter(pl.col("event_type") == "purchase")["session_id"].to_list()
+    )
+
+    order_sessions = orders_online["session_id"].to_list()
+    assert len(order_sessions) > 0
+    for sid in order_sessions:
+        assert sid in click_sessions, f"Order session_id {sid} missing from clickstream"
+        assert sid in purchase_sessions, f"Order session_id {sid} missing purchase event in clickstream"
+
+
+def test_identity_noise_end_to_end(tmp_path: Path):
+    output_dir = tmp_path / "messy_dataset"
+    config = load_config(tier_name="small", seed=77, output_dir=output_dir, identity_noise=0.20)
+    orchestrator = Orchestrator(config)
+    orchestrator.run()
+
+    customers = pl.read_parquet(output_dir / "customers.parquet")
+    gt_path = output_dir / "identity_ground_truth.parquet"
+    assert gt_path.exists()
+
+    gt = pl.read_parquet(gt_path)
+    assert gt.height == customers.height
+    assert gt.filter(pl.col("is_duplicate")).height > 0
+
+    cust_ids = set(customers["customer_id"].to_list())
+    assert set(gt["customer_id"].to_list()) == cust_ids
+    for teid in gt["true_entity_id"].to_list():
+        assert teid in cust_ids

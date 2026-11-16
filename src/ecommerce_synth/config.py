@@ -83,6 +83,7 @@ class GenerationConfig(BaseModel):
     product_count: int = 2000
     store_count: int = 50
     fraud_rate: float = 0.02
+    identity_noise: float = 0.0
     personas: dict[str, PersonaConfig]
     omnichannel_rate: float = 0.30
     seasonality: dict[int, float]
@@ -125,6 +126,7 @@ def load_config(
     seed: int = 42,
     output_dir: str | Path | None = None,
     fraud_rate: float | None = None,
+    identity_noise: float | None = None,
     config_dir: Path | None = None,
 ) -> GenerationConfig:
     """Load and merge default config with the requested tier."""
@@ -141,9 +143,11 @@ def load_config(
 
     tier_cfg = TierConfig(**tiers_data["tiers"][tier_name])
 
-    # Override fraud rate if provided
+    # Override fraud rate / identity noise if provided
     if fraud_rate is not None:
         default_data["fraud_rate"] = fraud_rate
+    if identity_noise is not None:
+        default_data["identity_noise"] = identity_noise
 
     config = GenerationConfig(
         **default_data,

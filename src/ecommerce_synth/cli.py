@@ -28,6 +28,7 @@ def generate(
     output: str = typer.Option(None, help="Output directory path"),
     seed: int = typer.Option(42, help="Random seed for reproducibility"),
     fraud_rate: float = typer.Option(None, help="Fraud injection rate (0.0-1.0)"),
+    identity_noise: float = typer.Option(None, "--identity-noise", help="Duplicate/messy customer identity rate (0.0-1.0) for entity resolution"),
     only: str = typer.Option(None, help="Comma-separated list of domains to generate"),
     incremental: str = typer.Option(None, "--incremental", help="Path to existing dataset directory for incremental generation"),
     days: int = typer.Option(1, "--days", help="Number of days of incremental data to generate"),
@@ -61,6 +62,7 @@ def generate(
             seed=seed,
             output_dir=output,
             fraud_rate=fraud_rate,
+            identity_noise=identity_noise,
         )
 
         only_list = [s.strip() for s in only.split(",")] if only else None

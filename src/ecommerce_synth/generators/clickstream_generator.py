@@ -112,6 +112,7 @@ class ClickstreamGenerator(BaseGenerator):
         *,
         customers: pl.DataFrame,
         products: pl.DataFrame,
+        orders_online: pl.DataFrame | None = None,
         **deps,
     ) -> pl.DataFrame:
         target = self.config.tier.clickstream_events
@@ -123,9 +124,40 @@ class ClickstreamGenerator(BaseGenerator):
         records: list[dict] = []
         event_count = 0
 
-        # Batch size to control memory
-        batch_size = min(100000, target)
+        # 1. Generate linked purchase sessions for actual online orders
+        has_orders = orders_online is not None and not orders_online.is_empty()
+        if has_orders:
+            order_rows = orders_online.select([
+                "customer_id", "order_date", "device_type", "session_id", "total_amount"
+            ]).to_dicts()
+            for ord_row in order_rows:
+                if event_count >= target:
+                    break
+                remaining = target - event_count
+                cid = ord_row["customer_id"]
+                persona = personas.get(cid)
+                base_events = list(SESSION_PROFILES["purchase"]["events"])
+                events = self._expand_events(base_events, persona)
+                if len(events) > remaining:
+                    events = events[-remaining:]
+                if not events:
+                    break
 
+                session_records = self._build_session_records(
+                    events=events,
+                    session_id=ord_row["session_id"],
+                    cid=cid,
+                    persona=persona,
+                    device=ord_row["device_type"],
+                    end_timestamp=ord_row["order_date"],
+                    final_cart_value=ord_row["total_amount"],
+                    product_list=product_list,
+                    categories=categories,
+                )
+                records.extend(session_records)
+                event_count += len(session_records)
+
+        # 2. Fill remaining budget with non-converting / browsing sessions
         while event_count < target:
             remaining = target - event_count
 
@@ -138,7 +170,7 @@ class ClickstreamGenerator(BaseGenerator):
                 persona = None
 
             # Pick session profile, weighted by persona
-            session_type = self._pick_session_type(persona)
+            session_type = self._pick_session_type(persona, allow_purchase=not has_orders)
             profile = SESSION_PROFILES[session_type]
             base_events = list(profile["events"])
 
@@ -150,13 +182,7 @@ class ClickstreamGenerator(BaseGenerator):
             if not events:
                 break
 
-            session_id = self._uuid()
             device = self._pick_weighted(DEVICE_TYPES, DEVICE_WEIGHTS)
-            browser = self.rng.choice(DEVICE_BROWSER_MAP.get(device, BROWSERS))
-            os = self.rng.choice(DEVICE_OS_MAP.get(device, OPERATING_SYSTEMS))
-            referrer = self._pick_weighted(REFERRERS, REFERRER_WEIGHTS)
-
-            # Session start time
             session_date = random_date_in_range(
                 self.rng,
                 self.config.date_range.start,
@@ -165,98 +191,18 @@ class ClickstreamGenerator(BaseGenerator):
             )
             session_start = random_timestamp(self.rng, session_date, "online")
 
-            # IP address (anonymized)
-            ip = f"{self.rng.randint(10, 223)}.{self.rng.randint(0, 255)}.{self.rng.randint(0, 255)}.xxx"
-
-            cart_value = 0.0
-            viewed_products: list[dict] = []
-            current_time = session_start
-
-            for event_type in events:
-                # Time between events: 3-120 seconds
-                gap = timedelta(seconds=self.rng.uniform(3, 120))
-                current_time = current_time + gap
-
-                product_id = None
-                search_query = None
-                page_url = "/"
-
-                if event_type == "page_view":
-                    page_url = self.rng.choice(PAGE_URLS)
-                    if "{category}" in page_url:
-                        page_url = page_url.replace("{category}", self.rng.choice(categories).lower().replace(" ", "-"))
-                    if "{brand}" in page_url:
-                        brand = self.rng.choice(product_list)["brand"]
-                        page_url = page_url.replace("{brand}", brand.lower().replace(" ", "-"))
-
-                elif event_type == "product_view":
-                    prod = self._pick_product(persona, product_list, categories)
-                    product_id = prod["product_id"]
-                    page_url = f"/products/{product_id}"
-                    viewed_products.append(prod)
-
-                elif event_type == "search":
-                    search_query = self.rng.choice(SEARCH_QUERIES)
-                    page_url = f"/search?q={search_query.replace(' ', '+')}"
-
-                elif event_type == "add_to_cart":
-                    if viewed_products:
-                        prod = self.rng.choice(viewed_products)
-                    else:
-                        prod = self._pick_product(persona, product_list, categories)
-                    product_id = prod["product_id"]
-                    cart_value += prod["price"]
-                    cart_value = round(cart_value, 2)
-                    page_url = f"/products/{product_id}"
-
-                elif event_type == "remove_from_cart":
-                    if viewed_products:
-                        prod = self.rng.choice(viewed_products)
-                        product_id = prod["product_id"]
-                        cart_value = max(0, cart_value - prod["price"])
-                    page_url = "/cart"
-
-                elif event_type == "begin_checkout":
-                    page_url = "/checkout"
-
-                elif event_type == "purchase":
-                    page_url = "/checkout/confirmation"
-
-                elif event_type == "add_to_wishlist":
-                    if viewed_products:
-                        prod = self.rng.choice(viewed_products)
-                        product_id = prod["product_id"]
-                    page_url = "/wishlist"
-
-                elif event_type == "apply_coupon":
-                    page_url = "/cart"
-
-                elif event_type in ("filter_products", "sort_products"):
-                    page_url = f"/category/{self.rng.choice(categories).lower().replace(' ', '-')}"
-
-                elif event_type == "login":
-                    page_url = "/account/login"
-
-                elif event_type == "signup":
-                    page_url = "/account/register"
-
-                records.append({
-                    "event_id": self._uuid(),
-                    "session_id": session_id,
-                    "customer_id": cid,
-                    "event_timestamp": current_time,
-                    "event_type": event_type,
-                    "page_url": page_url,
-                    "referrer": referrer,
-                    "device_type": device,
-                    "browser": browser,
-                    "os": os,
-                    "ip_address": ip,
-                    "product_id": product_id,
-                    "search_query": search_query,
-                    "cart_value": cart_value if event_type in ("add_to_cart", "remove_from_cart", "begin_checkout", "purchase") else None,
-                })
-                event_count += 1
+            session_records = self._build_session_records(
+                events=events,
+                session_id=self._uuid(),
+                cid=cid,
+                persona=persona,
+                device=device,
+                start_timestamp=session_start,
+                product_list=product_list,
+                categories=categories,
+            )
+            records.extend(session_records)
+            event_count += len(session_records)
 
         df = pl.DataFrame(
             records,
@@ -273,14 +219,134 @@ class ClickstreamGenerator(BaseGenerator):
             })
         return df
 
-    def _pick_session_type(self, persona: CustomerPersona | None) -> str:
+    def _build_session_records(
+        self,
+        *,
+        events: list[str],
+        session_id: str,
+        cid: str | None,
+        persona: CustomerPersona | None,
+        device: str,
+        product_list: list[dict],
+        categories: list[str],
+        start_timestamp=None,
+        end_timestamp=None,
+        final_cart_value: float | None = None,
+    ) -> list[dict]:
+        """Build ordered clickstream event rows for a single session."""
+        browser = self.rng.choice(DEVICE_BROWSER_MAP.get(device, BROWSERS))
+        os = self.rng.choice(DEVICE_OS_MAP.get(device, OPERATING_SYSTEMS))
+        referrer = self._pick_weighted(REFERRERS, REFERRER_WEIGHTS)
+        ip = f"{self.rng.randint(10, 223)}.{self.rng.randint(0, 255)}.{self.rng.randint(0, 255)}.xxx"
+
+        gaps = [timedelta(seconds=self.rng.uniform(3, 120)) for _ in events]
+        if end_timestamp is not None:
+            total_dur = sum((g for g in gaps), timedelta())
+            current_time = end_timestamp - total_dur
+        else:
+            current_time = start_timestamp
+
+        session_records: list[dict] = []
+        cart_value = 0.0
+        viewed_products: list[dict] = []
+
+        for event_type, gap in zip(events, gaps):
+            current_time = current_time + gap
+
+            product_id = None
+            search_query = None
+            page_url = "/"
+
+            if event_type == "page_view":
+                page_url = self.rng.choice(PAGE_URLS)
+                if "{category}" in page_url:
+                    page_url = page_url.replace("{category}", self.rng.choice(categories).lower().replace(" ", "-"))
+                if "{brand}" in page_url:
+                    brand = self.rng.choice(product_list)["brand"]
+                    page_url = page_url.replace("{brand}", brand.lower().replace(" ", "-"))
+
+            elif event_type == "product_view":
+                prod = self._pick_product(persona, product_list, categories)
+                product_id = prod["product_id"]
+                page_url = f"/products/{product_id}"
+                viewed_products.append(prod)
+
+            elif event_type == "search":
+                search_query = self.rng.choice(SEARCH_QUERIES)
+                page_url = f"/search?q={search_query.replace(' ', '+')}"
+
+            elif event_type == "add_to_cart":
+                if viewed_products:
+                    prod = self.rng.choice(viewed_products)
+                else:
+                    prod = self._pick_product(persona, product_list, categories)
+                product_id = prod["product_id"]
+                cart_value += prod["price"]
+                cart_value = round(cart_value, 2)
+                page_url = f"/products/{product_id}"
+
+            elif event_type == "remove_from_cart":
+                if viewed_products:
+                    prod = self.rng.choice(viewed_products)
+                    product_id = prod["product_id"]
+                    cart_value = max(0, cart_value - prod["price"])
+                page_url = "/cart"
+
+            elif event_type == "begin_checkout":
+                page_url = "/checkout"
+
+            elif event_type == "purchase":
+                page_url = "/checkout/confirmation"
+                if final_cart_value is not None:
+                    cart_value = round(final_cart_value, 2)
+
+            elif event_type == "add_to_wishlist":
+                if viewed_products:
+                    prod = self.rng.choice(viewed_products)
+                    product_id = prod["product_id"]
+                page_url = "/wishlist"
+
+            elif event_type == "apply_coupon":
+                page_url = "/cart"
+
+            elif event_type in ("filter_products", "sort_products"):
+                page_url = f"/category/{self.rng.choice(categories).lower().replace(' ', '-')}"
+
+            elif event_type == "login":
+                page_url = "/account/login"
+
+            elif event_type == "signup":
+                page_url = "/account/register"
+
+            session_records.append({
+                "event_id": self._uuid(),
+                "session_id": session_id,
+                "customer_id": cid,
+                "event_timestamp": current_time,
+                "event_type": event_type,
+                "page_url": page_url,
+                "referrer": referrer,
+                "device_type": device,
+                "browser": browser,
+                "os": os,
+                "ip_address": ip,
+                "product_id": product_id,
+                "search_query": search_query,
+                "cart_value": cart_value if event_type in ("add_to_cart", "remove_from_cart", "begin_checkout", "purchase") else None,
+            })
+
+        return session_records
+
+    def _pick_session_type(self, persona: CustomerPersona | None, allow_purchase: bool = True) -> str:
         """Pick a session type weighted by persona's browse-to-buy rate."""
         profiles = list(SESSION_PROFILES.keys())
         weights = [SESSION_PROFILES[p]["weight"] for p in profiles]
 
-        if persona:
+        purchase_idx = profiles.index("purchase")
+        if not allow_purchase:
+            weights[purchase_idx] = 0.0
+        elif persona:
             # Boost purchase sessions for high-converting personas
-            purchase_idx = profiles.index("purchase")
             if persona.browse_to_buy > 0.05:
                 weights[purchase_idx] *= (persona.browse_to_buy / 0.03)
             elif persona.browse_to_buy == 0:

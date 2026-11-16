@@ -79,12 +79,13 @@ class Orchestrator:
             }, only
         )
 
-        # 5. Clickstream (depends on customers, products)
+        # 5. Clickstream (depends on customers, products, orders_online)
         console.print("\n[bold]Phase 4: Clickstream[/bold]")
         self._generate_and_write(
             "clickstream", ClickstreamGenerator, {
                 "customers": self.data["customers"],
                 "products": self.data["products"],
+                "orders_online": self.data.get("orders_online", pl.DataFrame()),
             }, only
         )
 
