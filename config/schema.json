@@ -102,8 +102,7 @@
       "foreign_keys": {
         "customer_id": "customers.customer_id",
         "shipping_address_id": "addresses.address_id",
-        "billing_address_id": "addresses.address_id",
-        "session_id": "clickstream.session_id"
+        "billing_address_id": "addresses.address_id"
       },
       "columns": {
         "order_id": { "type": "string (UUID)", "nullable": false, "description": "Online order primary key" },
@@ -120,7 +119,7 @@
         "payment_method": { "type": "string", "nullable": false, "description": "credit_card, debit_card, paypal, apple_pay, gift_card" },
         "coupon_code": { "type": "string", "nullable": true, "description": "Coupon applied if any" },
         "device_type": { "type": "string", "nullable": false, "description": "desktop, mobile, tablet" },
-        "session_id": { "type": "string (UUID)", "nullable": false, "description": "FK to clickstream session" }
+        "session_id": { "type": "string (UUID)", "nullable": false, "description": "Web browsing session identifier that originated this order" }
       }
     },
     "order_items_online": {
@@ -366,12 +365,12 @@
       "primary_key": "flag_id",
       "foreign_keys": {
         "customer_id": "customers.customer_id",
-        "entity_id": "orders_online.order_id or orders_instore.transaction_id"
+        "entity_id": "customers.customer_id or orders_online.order_id or orders_instore.transaction_id (polymorphic)"
       },
       "columns": {
         "flag_id": { "type": "string (UUID)", "nullable": false, "description": "Flag primary key" },
         "entity_type": { "type": "string", "nullable": false, "description": "order, account, transaction, session" },
-        "entity_id": { "type": "string (UUID)", "nullable": false, "description": "Flagged entity identifier" },
+        "entity_id": { "type": "string (UUID)", "nullable": false, "description": "Polymorphic identifier of flagged entity: customer_id (when entity_type='account') or order_id/transaction_id (when entity_type='order')" },
         "customer_id": { "type": "string (UUID)", "nullable": false, "description": "FK to customers" },
         "fraud_type": { "type": "string", "nullable": false, "description": "card_testing, account_takeover, promo_abuse, refund_abuse, synthetic_identity, velocity_spike" },
         "risk_score": { "type": "float", "nullable": false, "description": "Model-like anomaly probability score (0.0 to 1.0)" },

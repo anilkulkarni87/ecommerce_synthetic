@@ -34,6 +34,34 @@ def test_duckdb_export_and_views(tmp_path: Path):
     conn.close()
 
 
+def test_duckdb_export_custom_schema(tmp_path: Path):
+    from ecommerce_synth.exporters.base import ExportConfig
+    from ecommerce_synth.exporters.duckdb import DuckDBExporter
+    import polars as pl
+
+    data_dir = tmp_path / "custom_sch_data"
+    data_dir.mkdir()
+    df = pl.DataFrame({"customer_id": ["c1", "c2"], "first_name": ["Alice", "Bob"]})
+    df.write_parquet(data_dir / "customers.parquet")
+
+    db_file = tmp_path / "custom_sch.duckdb"
+    config = ExportConfig(
+        target="duckdb",
+        data_dir=data_dir,
+        database=str(db_file),
+        schema_name="my_custom_schema",
+        create_views=False,
+    )
+    exporter = DuckDBExporter(config)
+    res = exporter.export()
+    assert res.target == "duckdb"
+
+    conn = duckdb.connect(str(db_file))
+    cnt = conn.execute("SELECT COUNT(*) FROM my_custom_schema.customers").fetchone()[0]
+    assert cnt == 2
+    conn.close()
+
+
 def test_profiler_metrics_and_html(tmp_path: Path):
     from ecommerce_synth.config import load_config
     from ecommerce_synth.orchestrator import Orchestrator

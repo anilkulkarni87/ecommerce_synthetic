@@ -62,23 +62,33 @@ class LoyaltyGenerator(BaseGenerator):
         if len(eligible) > target_members:
             eligible = self.rng.sample(eligible, target_members)
 
-        # Build order lookup: customer_id → list of (date, amount, source)
-        order_history: dict[str, list[tuple[date, float, str]]] = {}
+        # Build order lookup: customer_id → list of (date, amount, source, order_id)
+        order_history: dict[str, list[tuple[date, float, str, str]]] = {}
         if orders_online.height > 0:
-            for row in orders_online.select(["customer_id", "order_date", "total_amount"]).to_dicts():
+            for row in orders_online.select(["customer_id", "order_date", "total_amount", "order_id"]).to_dicts():
                 cid = row["customer_id"]
                 if cid not in order_history:
                     order_history[cid] = []
-                order_history[cid].append((row["order_date"].date() if hasattr(row["order_date"], 'date') else row["order_date"], row["total_amount"], "online"))
+                order_history[cid].append((
+                    row["order_date"].date() if hasattr(row["order_date"], 'date') else row["order_date"],
+                    row["total_amount"],
+                    "online",
+                    row["order_id"],
+                ))
 
         if orders_instore.height > 0:
-            for row in orders_instore.select(["customer_id", "transaction_date", "total_amount"]).to_dicts():
+            for row in orders_instore.select(["customer_id", "transaction_date", "total_amount", "transaction_id"]).to_dicts():
                 cid = row["customer_id"]
                 if cid is None:
                     continue
                 if cid not in order_history:
                     order_history[cid] = []
-                order_history[cid].append((row["transaction_date"].date() if hasattr(row["transaction_date"], 'date') else row["transaction_date"], row["total_amount"], "instore"))
+                order_history[cid].append((
+                    row["transaction_date"].date() if hasattr(row["transaction_date"], 'date') else row["transaction_date"],
+                    row["total_amount"],
+                    "instore",
+                    row["transaction_id"],
+                ))
 
         members: list[dict] = []
         transactions: list[dict] = []
@@ -109,7 +119,7 @@ class LoyaltyGenerator(BaseGenerator):
             cust_orders = order_history.get(cid, [])
             cust_orders.sort(key=lambda x: x[0])
 
-            for order_date, amount, source in cust_orders:
+            for order_date, amount, source, source_oid in cust_orders:
                 if isinstance(order_date, date) and order_date < enroll_date:
                     continue
 
@@ -123,7 +133,7 @@ class LoyaltyGenerator(BaseGenerator):
                     "transaction_date": order_date if isinstance(order_date, date) else order_date,
                     "transaction_type": "earn",
                     "points": earned,
-                    "source_order_id": None,  # Would need to join on order_id
+                    "source_order_id": source_oid,
                     "description": f"Purchase earn {multiplier}x points ({source})",
                 })
                 lifetime_points += earned

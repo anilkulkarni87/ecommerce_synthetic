@@ -60,18 +60,24 @@ class DuckDBExporter(BaseExporter):
         created_views: list[str] = []
         total_rows = 0
 
+        schema = self.config.schema_name or "main"
         try:
+            if schema != "main":
+                conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema};")
+                conn.execute(f"USE {schema};")
+
             for pf in self.config.parquet_files:
                 table_name = pf.stem
                 abs_parquet = str(pf.resolve())
+                qual_name = f"{schema}.{table_name}" if schema != "main" else table_name
 
                 conn.execute(
-                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{abs_parquet}');"
+                    f"CREATE OR REPLACE TABLE {qual_name} AS SELECT * FROM read_parquet('{abs_parquet}');"
                 )
-                count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                count = conn.execute(f"SELECT COUNT(*) FROM {qual_name}").fetchone()[0]
                 total_rows += count
                 loaded_tables.append(table_name)
-                console.print(f"  ✓ [green]{table_name}[/green] ({count:,} rows)")
+                console.print(f"  ✓ [green]{qual_name}[/green] ({count:,} rows)")
 
             # Create analytical views
             if self.config.create_views:
