@@ -1,0 +1,19 @@
+name: Germany
+country_code: DE
+currency_code: EUR
+currency_minor_unit: 2
+locale: de-DE
+timezone: Europe/Berlin
+phone_country_code: "+49"
+postal_code_label: Postleitzahl
+administrative_area_label: State
+tax_type: VAT
+administrative_areas:
+  - {code: BE, name: Berlin, city: Berlin, postal_prefix: "10115"}
+  - {code: BY, name: Bavaria, city: Munich, postal_prefix: "80331"}
+  - {code: HH, name: Hamburg, city: Hamburg, postal_prefix: "20095"}
+  - {code: HE, name: Hesse, city: Frankfurt, postal_prefix: "60311"}
+  - {code: NW, name: North Rhine-Westphalia, city: Cologne, postal_prefix: "50667"}
+tax_rates:
+  default: 0.19
+payment_methods: [credit_card, debit_card, paypal, sepa_debit, invoice, gift_card]
