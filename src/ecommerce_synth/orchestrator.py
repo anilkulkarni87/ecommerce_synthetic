@@ -22,6 +22,7 @@ from .generators.experiment_generator import ExperimentGenerator
 from .generators.fraud_generator import FraudGenerator
 from .generators.fulfillment_generator import FulfillmentGenerator
 from .generators.loyalty_generator import LoyaltyGenerator
+from .generators.marketing_generator import MarketingGenerator
 from .generators.order_generator import OrderGenerator
 from .generators.product_generator import ProductGenerator
 from .generators.review_generator import ReviewGenerator
@@ -66,6 +67,11 @@ class Orchestrator:
         # 2. Stores (fixed dimension, no deps)
         self._generate_and_write(
             "stores", StoreGenerator, {}, only
+        )
+
+        # 2b. Paid Media & MMM (ad_campaigns, ad_spend_daily)
+        self._generate_and_write(
+            "marketing", MarketingGenerator, {}, only
         )
 
         # 3. Customers + Addresses (no deps)
@@ -147,13 +153,14 @@ class Orchestrator:
             }, only
         )
 
-        # 5. Clickstream (depends on customers, products, orders_online)
+        # 5. Clickstream (depends on customers, products, orders_online, ad_campaigns)
         console.print("\n[bold]Phase 4: Clickstream[/bold]")
         self._generate_and_write(
             "clickstream", ClickstreamGenerator, {
                 "customers": self.data["customers"],
                 "products": self.data["products"],
                 "orders_online": self.data.get("orders_online", pl.DataFrame()),
+                "ad_campaigns": self.data.get("ad_campaigns", pl.DataFrame()),
             }, only
         )
 

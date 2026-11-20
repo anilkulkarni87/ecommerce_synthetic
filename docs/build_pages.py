@@ -25,6 +25,8 @@ DOMAINS = {
     "instore_accounts": "Customer 360 & Identity",
     "loyalty_members": "Customer 360 & Identity",
     "clickstream": "Engagement & Retention",
+    "ad_campaigns": "Engagement & Retention",
+    "ad_spend_daily": "Engagement & Retention",
     "email_campaigns": "Engagement & Retention",
     "email_events": "Engagement & Retention",
     "loyalty_transactions": "Engagement & Retention",
@@ -124,7 +126,7 @@ html_template = '''<!DOCTYPE html>
           </svg>
           <span class="font-semibold text-sm font-mono tracking-tight">ecommerce-synth</span>
         </a>
-        <span class="hidden sm:inline-block text-[11px] font-mono px-2 py-0.5 bg-vellum text-muted border border-hairline">v1.1.0 · 24 Tables</span>
+        <span class="hidden sm:inline-block text-[11px] font-mono px-2 py-0.5 bg-vellum text-muted border border-hairline">v1.1.0 · 26 Tables</span>
       </div>
 
       <nav class="hidden md:flex lg:hidden items-center gap-5 text-xs font-medium text-muted">
@@ -467,9 +469,9 @@ html_template = '''<!DOCTYPE html>
       <section id="schema" class="py-14 border-b border-hairline">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-6">
           <div>
-            <h2 class="font-bold text-ink mb-2">Schema Topology &amp; Data Dictionary (24 Tables)</h2>
+            <h2 class="font-bold text-ink mb-2">Schema Topology &amp; Data Dictionary (26 Tables)</h2>
             <p class="text-sm text-muted max-w-2xl">
-              22 core omnichannel tables plus 2 optional governance/ER tables (<code class="font-mono text-xs text-ink">customer_consents</code>, <code class="font-mono text-xs text-ink">identity_ground_truth</code>).
+              24 core omnichannel tables (including <code class="font-mono text-xs text-ink">ad_campaigns</code> &amp; <code class="font-mono text-xs text-ink">ad_spend_daily</code>) plus 2 optional governance/ER tables (<code class="font-mono text-xs text-ink">customer_consents</code>, <code class="font-mono text-xs text-ink">identity_ground_truth</code>).
             </p>
           </div>
 
@@ -585,10 +587,10 @@ html_template = '''<!DOCTYPE html>
 
         <!-- Domain Filter Pills -->
         <div class="flex flex-wrap gap-2 mb-6">
-          <button onclick="filterDomain('all')" id="domain-pill-all" class="px-3.5 py-1.5 text-xs font-medium bg-cobalt text-white transition">All (24)</button>
+          <button onclick="filterDomain('all')" id="domain-pill-all" class="px-3.5 py-1.5 text-xs font-medium bg-cobalt text-white transition">All (26)</button>
           <button onclick="filterDomain('Omnichannel Sales & POS')" id="domain-pill-sales" class="px-3.5 py-1.5 text-xs font-medium bg-plate text-muted hover:text-ink border border-hairline transition">Sales, Fulfillment &amp; POS (9)</button>
           <button onclick="filterDomain('Customer 360 & Identity')" id="domain-pill-cust" class="px-3.5 py-1.5 text-xs font-medium bg-plate text-muted hover:text-ink border border-hairline transition">Customer 360 (4)</button>
-          <button onclick="filterDomain('Engagement & Retention')" id="domain-pill-eng" class="px-3.5 py-1.5 text-xs font-medium bg-plate text-muted hover:text-ink border border-hairline transition">Engagement (6)</button>
+          <button onclick="filterDomain('Engagement & Retention')" id="domain-pill-eng" class="px-3.5 py-1.5 text-xs font-medium bg-plate text-muted hover:text-ink border border-hairline transition">Engagement &amp; Ads (8)</button>
           <button onclick="filterDomain('Experimentation & Fraud')" id="domain-pill-fraud" class="px-3.5 py-1.5 text-xs font-medium bg-plate text-muted hover:text-ink border border-hairline transition">Experiments &amp; Fraud (3)</button>
           <button onclick="filterDomain('Governance & Compliance')" id="domain-pill-gov" class="px-3.5 py-1.5 text-xs font-medium bg-plate text-muted hover:text-ink border border-hairline transition">Governance &amp; ER (2)</button>
         </div>

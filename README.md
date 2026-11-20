@@ -13,7 +13,8 @@ A realistic, referentially-intact omnichannel synthetic ecommerce data generator
 ## ✨ Features
 
 - **Omnichannel Simulation:** Models decoupled online e-commerce (`orders_online`, guest checkout, BOPIS pickup, BORIS store returns) and brick-and-mortar Point-of-Sale (`instore_accounts` with phone/email capture, POS-only shoppers, `orders_instore`, `payment_token` card fingerprints).
-- **Referential Integrity:** Complete foreign-key consistency across 22 core tables (including `shipments`, `returns`, `inventory_snapshots`) plus optional `customer_consents` and `identity_ground_truth`.
+- **Paid Media & MMM:** Generates `ad_campaigns` and `ad_spend_daily` (with Hill saturation, platform reporting bias, and 30-day Geo-Lift holdouts) linked to `clickstream` via `utm_source`, `utm_medium`, and `utm_campaign`.
+- **Referential Integrity:** Complete foreign-key consistency across 24 core tables (including `shipments`, `returns`, `inventory_snapshots`, `ad_campaigns`, `ad_spend_daily`) plus optional `customer_consents` and `identity_ground_truth`.
 - **Behavioral Personas:** Generates realistic behavioral variations using customer personas (Power Shopper, Regular, Occasional, Bargain Hunter, One-and-Done, Window Shopper, Fraudster).
 - **Full Clickstream Funnel:** Browsing sessions with persistent `anonymous_id` device cookies for pre-login session stitching and realistic conversion funnels (`page_view` → `search` → `product_view` → `add_to_cart` → `begin_checkout` → `purchase`).
 - **Multi-Currency & Tax Regimes:** Regional localization (`--regions US,GB,DE,JP`) across customers, stores, and orders with `currency_code`, `fx_rate_to_usd`, `total_amount_usd`, and VAT/GST/Sales Tax logic.

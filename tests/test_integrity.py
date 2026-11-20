@@ -295,3 +295,24 @@ def test_decoupled_pos_vs_digital_realism(generated_dataset: Path):
     assert clickstream["anonymous_id"].null_count() == 0
     stores = pl.read_parquet(generated_dataset / "stores.parquet")
     assert "country" in stores.columns
+
+
+def test_paid_media_and_mmm_tables(generated_dataset: Path):
+    ad_campaigns = pl.read_parquet(generated_dataset / "ad_campaigns.parquet")
+    ad_spend = pl.read_parquet(generated_dataset / "ad_spend_daily.parquet")
+    clickstream = pl.read_parquet(generated_dataset / "clickstream.parquet")
+
+    assert ad_campaigns.height > 0
+    assert ad_spend.height > 0
+    camp_ids = set(ad_campaigns["campaign_id"].to_list())
+    assert set(ad_spend["campaign_id"].to_list()).issubset(camp_ids)
+    # Geo-lift holdouts should exist with 0 spend
+    holdouts = ad_spend.filter(pl.col("is_holdout"))
+    assert holdouts.height > 0
+    assert holdouts["spend_usd"].sum() == 0.0
+
+    # Clickstream paid sessions must link to valid ad_campaigns
+    assert {"utm_source", "utm_medium", "utm_campaign"}.issubset(set(clickstream.columns))
+    paid_utms = set(clickstream["utm_campaign"].drop_nulls().to_list())
+    assert len(paid_utms) > 0
+    assert paid_utms.issubset(camp_ids)

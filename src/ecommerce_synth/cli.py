@@ -342,6 +342,28 @@ def validate(
         return len(diff_cust) == 0 and len(diff_prod) == 0, f"0 orphan customers, 0 orphan products"
     check("reviews FKs -> customers & products", check_reviews_fk)
 
+    # --- Paid Media & MMM Checks ---
+    def check_ad_spend_fk():
+        spend = get_table("ad_spend_daily")
+        camps = get_table("ad_campaigns")
+        if spend is None or camps is None:
+            return True, "skipped"
+        diff = set(spend["campaign_id"].to_list()) - set(camps["campaign_id"].to_list())
+        return len(diff) == 0, f"0 orphan campaign_ids ({spend.height} daily spend rows)"
+    check("ad_spend_daily.campaign_id -> ad_campaigns.campaign_id", check_ad_spend_fk)
+
+    def check_clickstream_utm_fk():
+        cs = get_table("clickstream")
+        camps = get_table("ad_campaigns")
+        if cs is None or camps is None or "utm_campaign" not in cs.columns:
+            return True, "skipped"
+        known = cs.filter(pl.col("utm_campaign").is_not_null())
+        if known.height == 0:
+            return True, "no paid UTM sessions"
+        diff = set(known["utm_campaign"].to_list()) - set(camps["campaign_id"].to_list())
+        return len(diff) == 0, f"0 orphan utm_campaigns ({known.height} paid events)"
+    check("clickstream.utm_campaign -> ad_campaigns.campaign_id", check_clickstream_utm_fk)
+
     # --- Experiment Assignments Checks ---
     def check_experiments_fk():
         assign = get_table("experiment_assignments")

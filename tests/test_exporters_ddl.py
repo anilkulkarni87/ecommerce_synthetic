@@ -13,12 +13,14 @@ def ddl_gen() -> DDLGenerator:
 
 
 def test_ddl_generator_loads_19_tables(ddl_gen: DDLGenerator) -> None:
-    assert len(ddl_gen.tables) == 22
+    assert len(ddl_gen.tables) == 24
     assert "customers" in ddl_gen.tables
     assert "orders_online" in ddl_gen.tables
     assert "shipments" in ddl_gen.tables
     assert "returns" in ddl_gen.tables
     assert "inventory_snapshots" in ddl_gen.tables
+    assert "ad_campaigns" in ddl_gen.tables
+    assert "ad_spend_daily" in ddl_gen.tables
     assert "fraud_flags" in ddl_gen.tables
 
 

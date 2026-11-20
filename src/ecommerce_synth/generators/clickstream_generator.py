@@ -113,6 +113,7 @@ class ClickstreamGenerator(BaseGenerator):
         customers: pl.DataFrame,
         products: pl.DataFrame,
         orders_online: pl.DataFrame | None = None,
+        ad_campaigns: pl.DataFrame | None = None,
         chunk_size: int | None = None,
         **deps,
     ):
@@ -123,6 +124,11 @@ class ClickstreamGenerator(BaseGenerator):
         customer_ids = customers["customer_id"].to_list()
         product_list = products.filter(pl.col("is_active")).to_dicts()
         categories = list(set(p["category"] for p in product_list))
+
+        campaigns_by_source: dict[str, list[dict]] = {}
+        if ad_campaigns is not None and not ad_campaigns.is_empty():
+            for c_row in ad_campaigns.select(["campaign_id", "utm_source", "utm_medium"]).to_dicts():
+                campaigns_by_source.setdefault(c_row["utm_source"], []).append(c_row)
 
         # Persistent browser/device anonymous_id (cookie) per customer & device for pre-login stitching
         cust_anon_ids: dict[tuple[str, str], str] = {}
@@ -141,6 +147,9 @@ class ClickstreamGenerator(BaseGenerator):
                     "product_id": pl.String,
                     "search_query": pl.String,
                     "cart_value": pl.Float64,
+                    "utm_source": pl.String,
+                    "utm_medium": pl.String,
+                    "utm_campaign": pl.String,
                 },
             )
             if df.height > 0:
@@ -182,6 +191,7 @@ class ClickstreamGenerator(BaseGenerator):
                     final_cart_value=ord_row["total_amount"],
                     product_list=product_list,
                     categories=categories,
+                    campaigns_by_source=campaigns_by_source,
                 )
                 records.extend(session_records)
                 event_count += len(session_records)
@@ -242,6 +252,7 @@ class ClickstreamGenerator(BaseGenerator):
                 start_timestamp=session_start,
                 product_list=product_list,
                 categories=categories,
+                campaigns_by_source=campaigns_by_source,
             )
             records.extend(session_records)
             event_count += len(session_records)
@@ -258,8 +269,11 @@ class ClickstreamGenerator(BaseGenerator):
         customers: pl.DataFrame,
         products: pl.DataFrame,
         orders_online: pl.DataFrame | None = None,
+        ad_campaigns: pl.DataFrame | None = None,
         **deps,
     ) -> pl.DataFrame:
+        if ad_campaigns is not None:
+            deps["ad_campaigns"] = ad_campaigns
         chunks = list(
             self.iter_generate(
                 customers=customers,
@@ -285,12 +299,28 @@ class ClickstreamGenerator(BaseGenerator):
         start_timestamp=None,
         end_timestamp=None,
         final_cart_value: float | None = None,
+        campaigns_by_source: dict[str, list[dict]] | None = None,
     ) -> list[dict]:
         """Build ordered clickstream event rows for a single session."""
         browser = self.rng.choice(DEVICE_BROWSER_MAP.get(device, BROWSERS))
         os = self.rng.choice(DEVICE_OS_MAP.get(device, OPERATING_SYSTEMS))
         referrer = self._pick_weighted(REFERRERS, REFERRER_WEIGHTS)
         ip = f"{self.rng.randint(10, 223)}.{self.rng.randint(0, 255)}.{self.rng.randint(0, 255)}.xxx"
+
+        utm_source = None
+        utm_medium = None
+        utm_campaign = None
+        if campaigns_by_source:
+            src_key = "facebook" if referrer == "instagram" else referrer
+            matching = campaigns_by_source.get(src_key)
+            if matching and self.rng.random() < 0.70:
+                chosen_camp = self.rng.choice(matching)
+                utm_source = referrer
+                utm_medium = chosen_camp["utm_medium"]
+                utm_campaign = chosen_camp["campaign_id"]
+            elif referrer == "email":
+                utm_source = "email"
+                utm_medium = "crm"
 
         gaps = [timedelta(seconds=self.rng.uniform(3, 120)) for _ in events]
         if end_timestamp is not None:
@@ -380,6 +410,9 @@ class ClickstreamGenerator(BaseGenerator):
                 "event_type": event_type,
                 "page_url": page_url,
                 "referrer": referrer,
+                "utm_source": utm_source,
+                "utm_medium": utm_medium,
+                "utm_campaign": utm_campaign,
                 "device_type": device,
                 "browser": browser,
                 "os": os,

@@ -187,3 +187,15 @@ def test_fraud_generator(small_config):
     assert isinstance(fraud_flags, pl.DataFrame)
     assert "risk_score" in fraud_flags.columns
     assert "is_confirmed_fraud" in fraud_flags.columns
+
+
+def test_marketing_generator(small_config):
+    from ecommerce_synth.generators.marketing_generator import MarketingGenerator
+
+    mkt_gen = MarketingGenerator(small_config)
+    res = mkt_gen.generate()
+    assert "ad_campaigns" in res
+    assert "ad_spend_daily" in res
+    assert res["ad_campaigns"].height == 15
+    assert res["ad_spend_daily"].height > 0
+    assert res["ad_spend_daily"].filter(pl.col("is_holdout")).height > 0

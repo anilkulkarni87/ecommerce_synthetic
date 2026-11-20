@@ -748,6 +748,21 @@
           "nullable": false,
           "description": "Acquisition source (google, direct, email, instagram, etc.)"
         },
+        "utm_source": {
+          "type": "string",
+          "nullable": true,
+          "description": "Paid/CRM UTM source tag"
+        },
+        "utm_medium": {
+          "type": "string",
+          "nullable": true,
+          "description": "UTM medium (cpc, paid_social, video, sponsored, crm)"
+        },
+        "utm_campaign": {
+          "type": "string",
+          "nullable": true,
+          "description": "FK to ad_campaigns.campaign_id for paid traffic"
+        },
         "device_type": {
           "type": "string",
           "nullable": false,
@@ -1432,6 +1447,127 @@
           "type": "boolean",
           "nullable": false,
           "description": "True when on_hand_qty == 0"
+        }
+      }
+    },
+    "ad_campaigns": {
+      "file": "ad_campaigns.parquet",
+      "description": "Paid media campaign catalog across search, social, video, and retail media.",
+      "primary_key": "campaign_id",
+      "columns": {
+        "campaign_id": {
+          "type": "string",
+          "nullable": false,
+          "description": "Paid campaign ID (e.g. AD-0001)"
+        },
+        "campaign_name": {
+          "type": "string",
+          "nullable": false,
+          "description": "Descriptive campaign name"
+        },
+        "channel": {
+          "type": "string",
+          "nullable": false,
+          "description": "google_search, meta_ads, tiktok, youtube, retail_media"
+        },
+        "objective": {
+          "type": "string",
+          "nullable": false,
+          "description": "prospecting, retargeting, or brand"
+        },
+        "utm_source": {
+          "type": "string",
+          "nullable": false,
+          "description": "Primary UTM source key"
+        },
+        "utm_medium": {
+          "type": "string",
+          "nullable": false,
+          "description": "cpc, paid_social, video, sponsored"
+        },
+        "daily_budget_usd": {
+          "type": "float",
+          "nullable": false,
+          "description": "Target daily media budget in USD",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "LOW"
+        },
+        "start_date": {
+          "type": "date",
+          "nullable": false,
+          "description": "Campaign start date"
+        },
+        "end_date": {
+          "type": "date",
+          "nullable": false,
+          "description": "Campaign end date"
+        },
+        "is_holdout_enabled": {
+          "type": "boolean",
+          "nullable": false,
+          "description": "Whether campaign participates in 30-day geo-lift holdouts"
+        }
+      }
+    },
+    "ad_spend_daily": {
+      "file": "ad_spend_daily.parquet",
+      "description": "Daily paid media spend, impressions, clicks, and platform-reported conversions for MMM and ROAS.",
+      "primary_key": "spend_id",
+      "foreign_keys": {
+        "campaign_id": "ad_campaigns.campaign_id"
+      },
+      "columns": {
+        "spend_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Daily spend record primary key"
+        },
+        "spend_date": {
+          "type": "date",
+          "nullable": false,
+          "description": "Calendar spend date"
+        },
+        "campaign_id": {
+          "type": "string",
+          "nullable": false,
+          "description": "FK to ad_campaigns"
+        },
+        "channel": {
+          "type": "string",
+          "nullable": false,
+          "description": "Paid media channel"
+        },
+        "region": {
+          "type": "string",
+          "nullable": false,
+          "description": "Target geo region (US, GB, DE, etc.)"
+        },
+        "impressions": {
+          "type": "integer",
+          "nullable": false,
+          "description": "Daily ad impressions"
+        },
+        "clicks": {
+          "type": "integer",
+          "nullable": false,
+          "description": "Daily ad clicks"
+        },
+        "spend_usd": {
+          "type": "float",
+          "nullable": false,
+          "description": "Daily media spend in USD",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
+        "attributed_conversions_reported": {
+          "type": "integer",
+          "nullable": false,
+          "description": "Ad-platform reported conversions (includes view-through bias)"
+        },
+        "is_holdout": {
+          "type": "boolean",
+          "nullable": false,
+          "description": "True during 30-day Geo-Lift holdout (0 spend)"
         }
       }
     }
