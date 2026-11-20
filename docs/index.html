@@ -101,7 +101,7 @@
         </div>
         <div>
           <span class="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-brand-400 bg-clip-text text-transparent">ecommerce-synth</span>
-          <span class="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20">v1.0.0</span>
+          <span class="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20">v1.1.0</span>
         </div>
       </div>
 
@@ -275,6 +275,73 @@
             <p class="text-yellow-400">{"timestamp": "2024-05-18T10:14:49Z", "channel": "web", "event_type": "purchase_complete", "order_id": "ord_8812f", "total": 129.99}</p>
             <p class="text-slate-500 mt-2">Streaming 142.5 events/sec... (Press Ctrl+C to stop)</p>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Capabilities & Architecture Features Section -->
+  <section id="features" class="py-24 border-t border-surface-700/60">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-14">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-brand-400 mb-2">Enterprise Capabilities</h2>
+        <p class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-4">Built for Global Scale, Streaming &amp; Governance</p>
+        <p class="text-slate-400 text-base">Beyond basic mock rows—engineered for 50M+ row lakehouse pipelines, global privacy compliance, and entity resolution benchmarking.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="glass-card p-6 rounded-2xl border-t-4 border-t-cyan-400">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">🌍</span>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">--regions global</span>
+          </div>
+          <h3 class="text-base font-bold text-white mb-2">Global Multi-Region Localization</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Supports 8 country packs (<code class="text-cyan-300 font-mono">US, GB, DE, FR, CA, JP, AU, BR</code>) with localized Faker names/addresses, ISO country codes, currencies/FX rates, and regional tax regimes.</p>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border-t-4 border-t-rose-400">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">🛡️</span>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">--compliance</span>
+          </div>
+          <h3 class="text-base font-bold text-white mb-2">GDPR / CCPA Consent &amp; PII Tags</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Generates <code class="text-rose-300 font-mono">customer_consents.parquet</code>, DSAR Right-to-Erasure PII tombstones, and <code class="text-rose-300 font-mono">DIRECT_PII / FINANCIAL</code> column tags compiled into Databricks UC &amp; Snowflake DDL.</p>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border-t-4 border-t-emerald-400">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">⚡</span>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">--stream-to</span>
+          </div>
+          <h3 class="text-base font-bold text-white mb-2">Direct-to-Database Streaming</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Stream generated chunks directly into DuckDB, Snowflake, Databricks UC, or BigQuery with <code class="text-emerald-300 font-mono">zero local Parquet files</code> written to disk.</p>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border-t-4 border-t-brand-400">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">📦</span>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-brand-500/10 text-brand-300 border border-brand-500/20">--chunk-size</span>
+          </div>
+          <h3 class="text-base font-bold text-white mb-2">50M+ Chunked Parquet Persistence</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Bounded-RAM streaming generator writes Hive-style <code class="text-brand-300 font-mono">table/part-00000.parquet</code> directories so Large &amp; XL runs never OOM.</p>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border-t-4 border-t-purple-400">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">🧩</span>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">--identity-noise</span>
+          </div>
+          <h3 class="text-base font-bold text-white mb-2">Entity Resolution Messy-Data Mode</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Injects duplicate customer profiles (email aliases, phone formatting, nicknames, household splits) paired with <code class="text-purple-300 font-mono">identity_ground_truth.parquet</code>.</p>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border-t-4 border-t-amber-400">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">🔗</span>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">100% FK Intact</span>
+          </div>
+          <h3 class="text-base font-bold text-white mb-2">Clickstream-to-Order Attribution</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Every <code class="text-amber-300 font-mono">orders_online.session_id</code> links to a complete clickstream purchase funnel with 29 validated referential integrity invariants.</p>
         </div>
       </div>
     </div>
@@ -2103,10 +2170,17 @@
         card.className = "glass-card rounded-2xl p-5 transition flex flex-col justify-between";
 
         let columnsHtml = '';
+        let piiCount = 0;
         for (const [cname, cinfo] of Object.entries(tinfo.columns)) {
           const isPK = cname === pk;
           const isFK = tinfo.foreign_keys && tinfo.foreign_keys[cname];
           const badgeClass = getTypeColorClass(cinfo.type);
+          const pii = cinfo.pii_classification;
+          if (pii) piiCount++;
+          let piiBadge = '';
+          if (pii === 'DIRECT_PII') piiBadge = '<span class="ml-1 text-[9px] px-1 py-0.2 bg-rose-500/20 text-rose-300 rounded font-bold">PII:HIGH</span>';
+          else if (pii === 'INDIRECT_PII') piiBadge = '<span class="ml-1 text-[9px] px-1 py-0.2 bg-amber-500/20 text-amber-300 rounded font-bold">PII:MED</span>';
+          else if (pii === 'FINANCIAL') piiBadge = '<span class="ml-1 text-[9px] px-1 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-bold">FIN</span>';
 
           columnsHtml += `
             <tr class="border-b border-surface-700/40 last:border-0 hover:bg-surface-800/40 text-[11px]">
@@ -2114,6 +2188,7 @@
                 ${cname}
                 ${isPK ? '<span class="ml-1 text-[9px] px-1 py-0.2 bg-amber-500/20 text-amber-300 rounded font-bold">PK</span>' : ''}
                 ${isFK ? '<span class="ml-1 text-[9px] px-1 py-0.2 bg-cyan-500/20 text-cyan-300 rounded font-bold">FK</span>' : ''}
+                ${piiBadge}
               </td>
               <td class="py-2 px-2">
                 <span class="px-1.5 py-0.5 rounded border ${badgeClass} font-mono">${cinfo.type}</span>
@@ -2150,6 +2225,7 @@
               <span class="px-2 py-0.5 rounded bg-surface-800 text-slate-300 font-mono">Cols: ${colCount}</span>
               <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">PK: ${pk}</span>
               ${fkCount > 0 ? `<span class="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono">FKs: ${fkCount}</span>` : ''}
+              ${piiCount > 0 ? `<span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 font-mono">Tags: ${piiCount}</span>` : ''}
             </div>
           </div>
 
