@@ -272,12 +272,12 @@
           <div class="flex items-center justify-between gap-3 mb-2.5">
             <div class="flex items-center gap-2.5">
               <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
-              <h3 class="text-base font-semibold text-slate-100">Entity Resolution Messy-Data Mode</h3>
+              <h3 class="text-base font-semibold text-slate-100">Cross-Channel Entity Resolution</h3>
             </div>
             <code class="text-[11px] font-mono text-amber-300 bg-elevated px-2 py-0.5 rounded border border-borderline">--identity-noise</code>
           </div>
           <p class="text-sm text-slate-400 leading-relaxed">
-            Injects realistic duplicate customer records (email aliases, phone reformatting, nicknames, typos, household splits) and outputs <code class="font-mono text-slate-300">identity_ground_truth.parquet</code> to benchmark Precision/Recall/F1.
+            Injects duplicate profiles, temporal PII drift, and 5% household sharing across <code class="font-mono text-slate-300">customers</code> and <code class="font-mono text-slate-300">instore_accounts</code>, emitting cross-channel <code class="font-mono text-slate-300">identity_ground_truth.parquet</code>.
           </p>
         </div>
 
@@ -285,12 +285,38 @@
           <div class="flex items-center justify-between gap-3 mb-2.5">
             <div class="flex items-center gap-2.5">
               <svg class="w-4 h-4 text-slate-300 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
-              <h3 class="text-base font-semibold text-slate-100">True Clickstream-to-Order Attribution</h3>
+              <h3 class="text-base font-semibold text-slate-100">Clickstream &amp; Guest Checkout</h3>
             </div>
-            <code class="text-[11px] font-mono text-slate-300 bg-elevated px-2 py-0.5 rounded border border-borderline">session_id</code>
+            <code class="text-[11px] font-mono text-slate-300 bg-elevated px-2 py-0.5 rounded border border-borderline">anonymous_id</code>
           </div>
           <p class="text-sm text-slate-400 leading-relaxed">
-            100% of <code class="font-mono text-slate-300">orders_online.session_id</code> values link to complete clickstream purchase funnels ending at <code class="font-mono text-slate-300">order_date</code>, alongside <code class="font-mono text-slate-300">loyalty_transactions.source_order_id</code> linkage.
+            100% of <code class="font-mono text-slate-300">orders_online.session_id</code> values link to purchase funnels, ~15% are guest checkouts (<code class="font-mono text-slate-300">guest_email</code>), and persistent <code class="font-mono text-slate-300">anonymous_id</code> cookies model pre-login browsing.
+          </p>
+        </div>
+
+        <div class="bg-canvas p-7">
+          <div class="flex items-center justify-between gap-3 mb-2.5">
+            <div class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 text-cyan-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z"/></svg>
+              <h3 class="text-base font-semibold text-slate-100">Decoupled Retail POS</h3>
+            </div>
+            <code class="text-[11px] font-mono text-cyan-300 bg-elevated px-2 py-0.5 rounded border border-borderline">instore_accounts</code>
+          </div>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            POS registers capture <code class="font-mono text-slate-300">phone_number</code>, <code class="font-mono text-slate-300">email</code>, or both with <code class="font-mono text-slate-300">customer_id = NULL</code>, alongside active POS-only shoppers, anonymous walk-ins, and <code class="font-mono text-slate-300">payment_token</code> card fingerprints.
+          </p>
+        </div>
+
+        <div class="bg-canvas p-7">
+          <div class="flex items-center justify-between gap-3 mb-2.5">
+            <div class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 text-violet-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>
+              <h3 class="text-base font-semibold text-slate-100">Omnichannel BOPIS &amp; BORIS</h3>
+            </div>
+            <code class="text-[11px] font-mono text-violet-300 bg-elevated px-2 py-0.5 rounded border border-borderline">fulfillment_type</code>
+          </div>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Models ~18% Buy Online, Pick Up In Store (<code class="font-mono text-slate-300">pickup_store_id</code>, free pickup, no carrier shipment) and ~35% Buy Online, Return In Store (<code class="font-mono text-slate-300">return_channel</code>, <code class="font-mono text-slate-300">return_store_id</code>).
           </p>
         </div>
       </div>
@@ -411,80 +437,81 @@
       <!-- Interactive Visual ERD -->
       <div class="bg-canvas border border-borderline rounded-xl p-4 mb-8 overflow-x-auto">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-medium text-slate-400">Interactive Relationship Map — click any table node to filter</span>
+          <span class="text-xs font-medium text-slate-400">Interactive Relationship Map — click any table node to filter (dashed line = identity stitching)</span>
           <button onclick="filterByTable('')" class="text-[11px] font-mono text-indigo-400 hover:text-indigo-300">Reset selection</button>
         </div>
-        <svg viewBox="0 0 960 230" class="w-full min-w-[720px] h-auto text-[11px] font-mono">
-          <!-- Connector lines -->
+        <svg viewBox="0 0 1040 245" class="w-full min-w-[780px] h-auto text-[11px] font-mono">
+          <!-- Solid FK connector lines -->
           <g stroke="#2B364E" stroke-width="1.25" fill="none">
-            <path d="M165 115 L250 45"/>
-            <path d="M165 115 L250 95"/>
-            <path d="M165 115 L250 145"/>
-            <path d="M165 115 L250 195"/>
-            <path d="M390 45 L475 45"/>
-            <path d="M390 45 L475 95"/>
-            <path d="M390 95 L475 145"/>
-            <path d="M390 145 L475 195"/>
-            <path d="M615 45 L700 45"/>
-            <path d="M615 95 L700 95"/>
-            <path d="M615 145 L700 145"/>
-            <path d="M615 195 L700 195"/>
+            <path d="M165 92 L245 43"/>
+            <path d="M165 92 L245 147"/>
+            <path d="M165 92 L245 199"/>
+            <path d="M420 43 L505 43"/>
+            <path d="M420 43 L505 95"/>
+            <path d="M420 43 L505 147"/>
+            <path d="M420 95 L505 199"/>
+            <path d="M665 43 L755 43"/>
+            <path d="M665 95 L755 95"/>
+            <path d="M665 147 L755 147"/>
+            <path d="M665 199 L755 199"/>
           </g>
+          <!-- Dashed identity-stitching link: customers <-> instore_accounts -->
+          <path d="M165 92 L245 95" stroke="#6366F1" stroke-width="1.25" stroke-dasharray="4 3" fill="none"/>
           <!-- Hub: customers -->
           <g onclick="filterByTable('customers')" class="cursor-pointer">
-            <rect x="20" y="95" width="145" height="40" rx="6" fill="#171E2E" stroke="#6366F1" stroke-width="1.5"/>
-            <text x="92" y="119" text-anchor="middle" fill="#F1F5F9" font-weight="600">customers</text>
+            <rect x="20" y="72" width="145" height="40" rx="6" fill="#171E2E" stroke="#6366F1" stroke-width="1.5"/>
+            <text x="92" y="96" text-anchor="middle" fill="#F1F5F9" font-weight="600">customers</text>
           </g>
-          <!-- Column 2 -->
+          <!-- Column 2 (wider 175px boxes so long names never clip) -->
           <g onclick="filterByTable('orders_online')" class="cursor-pointer">
-            <rect x="250" y="25" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="320" y="47" text-anchor="middle" fill="#E2E8F0">orders_online</text>
+            <rect x="245" y="25" width="175" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="332" y="47" text-anchor="middle" fill="#E2E8F0">orders_online</text>
           </g>
-          <g onclick="filterByTable('orders_instore')" class="cursor-pointer">
-            <rect x="250" y="77" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="320" y="99" text-anchor="middle" fill="#E2E8F0">orders_instore</text>
+          <g onclick="filterByTable('instore_accounts')" class="cursor-pointer">
+            <rect x="245" y="77" width="175" height="36" rx="6" fill="#111622" stroke="#22D3EE" stroke-opacity="0.45"/>
+            <text x="332" y="99" text-anchor="middle" fill="#67E8F9">instore_accounts</text>
           </g>
           <g onclick="filterByTable('customer_consents')" class="cursor-pointer">
-            <rect x="250" y="127" width="140" height="36" rx="6" fill="#111622" stroke="#334155" stroke-dasharray="3 2"/>
-            <text x="320" y="149" text-anchor="middle" fill="#FDA4AF">customer_consents</text>
+            <rect x="245" y="129" width="175" height="36" rx="6" fill="#111622" stroke="#334155" stroke-dasharray="3 2"/>
+            <text x="332" y="151" text-anchor="middle" fill="#FDA4AF">customer_consents</text>
           </g>
           <g onclick="filterByTable('identity_ground_truth')" class="cursor-pointer">
-            <rect x="250" y="177" width="140" height="36" rx="6" fill="#111622" stroke="#334155" stroke-dasharray="3 2"/>
-            <text x="320" y="199" text-anchor="middle" fill="#A5B4FC">identity_ground_truth</text>
+            <rect x="245" y="181" width="175" height="36" rx="6" fill="#111622" stroke="#334155" stroke-dasharray="3 2"/>
+            <text x="332" y="203" text-anchor="middle" fill="#A5B4FC">identity_ground_truth</text>
           </g>
           <!-- Column 3 -->
           <g onclick="filterByTable('shipments')" class="cursor-pointer">
-            <rect x="475" y="25" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="545" y="47" text-anchor="middle" fill="#E2E8F0">shipments</text>
+            <rect x="505" y="25" width="160" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="585" y="47" text-anchor="middle" fill="#E2E8F0">shipments</text>
           </g>
           <g onclick="filterByTable('returns')" class="cursor-pointer">
-            <rect x="475" y="77" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="545" y="99" text-anchor="middle" fill="#E2E8F0">returns</text>
+            <rect x="505" y="77" width="160" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="585" y="99" text-anchor="middle" fill="#E2E8F0">returns</text>
           </g>
           <g onclick="filterByTable('clickstream')" class="cursor-pointer">
-            <rect x="475" y="127" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="545" y="149" text-anchor="middle" fill="#67E8F9">clickstream</text>
+            <rect x="505" y="129" width="160" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="585" y="151" text-anchor="middle" fill="#67E8F9">clickstream</text>
           </g>
-          <g onclick="filterByTable('fraud_flags')" class="cursor-pointer">
-            <rect x="475" y="177" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="545" y="199" text-anchor="middle" fill="#FCA5A5">fraud_flags</text>
+          <g onclick="filterByTable('orders_instore')" class="cursor-pointer">
+            <rect x="505" y="181" width="160" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="585" y="203" text-anchor="middle" fill="#E2E8F0">orders_instore</text>
           </g>
           <!-- Column 4 -->
           <g onclick="filterByTable('products')" class="cursor-pointer">
-            <rect x="700" y="25" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="775" y="47" text-anchor="middle" fill="#E2E8F0">products</text>
+            <rect x="755" y="25" width="175" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="842" y="47" text-anchor="middle" fill="#E2E8F0">products</text>
           </g>
-          <g onclick="filterByTable('inventory_snapshots')" class="cursor-pointer">
-            <rect x="700" y="77" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="775" y="99" text-anchor="middle" fill="#E2E8F0">inventory_snapshots</text>
+          <g onclick="filterByTable('stores')" class="cursor-pointer">
+            <rect x="755" y="77" width="175" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="842" y="99" text-anchor="middle" fill="#E2E8F0">stores</text>
           </g>
           <g onclick="filterByTable('loyalty_members')" class="cursor-pointer">
-            <rect x="700" y="127" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="775" y="149" text-anchor="middle" fill="#E2E8F0">loyalty_members</text>
+            <rect x="755" y="129" width="175" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="842" y="151" text-anchor="middle" fill="#E2E8F0">loyalty_members</text>
           </g>
-          <g onclick="filterByTable('loyalty_transactions')" class="cursor-pointer">
-            <rect x="700" y="177" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
-            <text x="775" y="199" text-anchor="middle" fill="#E2E8F0">loyalty_transactions</text>
+          <g onclick="filterByTable('inventory_snapshots')" class="cursor-pointer">
+            <rect x="755" y="181" width="175" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="842" y="203" text-anchor="middle" fill="#E2E8F0">inventory_snapshots</text>
           </g>
         </svg>
       </div>
@@ -587,22 +614,35 @@
       </div>
 
       <div class="bg-surface border border-borderline rounded-xl overflow-hidden">
-        <div class="grid grid-cols-2 sm:grid-cols-4 border-b border-borderline bg-elevated/60 text-xs font-medium">
+        <div class="grid grid-cols-2 sm:grid-cols-5 border-b border-borderline bg-elevated/60 text-xs font-medium">
           <button onclick="switchRecipeTab('er')" id="rec-tab-er" class="py-3 px-4 border-b-2 border-indigo-500 text-white bg-surface transition">Entity Resolution</button>
+          <button onclick="switchRecipeTab('pos')" id="rec-tab-pos" class="py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">POS Stitching</button>
           <button onclick="switchRecipeTab('gdpr')" id="rec-tab-gdpr" class="py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">GDPR Consent Audit</button>
           <button onclick="switchRecipeTab('funnel')" id="rec-tab-funnel" class="py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Funnel Attribution</button>
           <button onclick="switchRecipeTab('fx')" id="rec-tab-fx" class="py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Multi-Currency GMV</button>
         </div>
         <div class="p-6 bg-canvas/80 font-mono text-xs text-slate-300 overflow-x-auto">
           <pre id="rec-content-er" class="leading-relaxed">SELECT
+  gt.record_type,
   gt.noise_type,
-  COUNT(*) AS duplicate_profiles,
+  COUNT(*) AS total_records,
   COUNT(DISTINCT gt.true_entity_id) AS canonical_entities
 FROM identity_ground_truth gt
-JOIN customers c ON gt.customer_id = c.customer_id
-WHERE gt.is_duplicate = TRUE
-GROUP BY gt.noise_type
-ORDER BY duplicate_profiles DESC;</pre>
+GROUP BY gt.record_type, gt.noise_type
+ORDER BY total_records DESC;</pre>
+
+          <pre id="rec-content-pos" class="hidden leading-relaxed">SELECT
+  ia.instore_account_id,
+  c.customer_id AS matched_digital_id,
+  COUNT(oi.transaction_id) AS pos_txns,
+  ROUND(SUM(oi.total_amount_usd), 2) AS pos_spend_usd
+FROM instore_accounts ia
+LEFT JOIN customers c
+  ON (ia.email IS NOT NULL AND LOWER(TRIM(ia.email)) = LOWER(TRIM(c.email)))
+  OR (ia.phone_number IS NOT NULL AND RIGHT(REGEXP_REPLACE(ia.phone_number, '[^0-9]', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', '', 'g'), 10))
+LEFT JOIN orders_instore oi ON ia.instore_account_id = oi.instore_account_id
+GROUP BY 1, 2
+ORDER BY pos_spend_usd DESC NULLS LAST;</pre>
 
           <pre id="rec-content-gdpr" class="hidden leading-relaxed">SELECT
   cc.jurisdiction,
@@ -2456,7 +2496,7 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
     };
 
     function switchRecipeTab(tabId) {
-      ['er', 'gdpr', 'funnel', 'fx'].forEach(t => {
+      ['er', 'pos', 'gdpr', 'funnel', 'fx'].forEach(t => {
         const btn = document.getElementById('rec-tab-' + t);
         const pre = document.getElementById('rec-content-' + t);
         if (t === tabId) {
