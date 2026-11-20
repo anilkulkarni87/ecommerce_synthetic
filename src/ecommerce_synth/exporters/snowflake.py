@@ -213,12 +213,16 @@ class SnowflakeExporter(BaseExporter):
 
         console.print(f"\n📦 [bold cyan]Staging files to Snowflake Stage:[/bold cyan] @{stage_qual}/")
 
-        for pf in self.config.parquet_files:
-            abs_path = str(pf.resolve())
-            put_sql = f"PUT file://{abs_path} @{stage_qual} AUTO_COMPRESS=FALSE OVERWRITE=TRUE;"
-            self._execute_sql(put_sql)
-            staged_paths.append(f"@{stage_qual}/{pf.name}")
-            console.print(f"  ✓ Staged [green]{pf.name}[/green]")
+        for table_name, part_paths in self.config.table_sources.items():
+            is_chunked = len(part_paths) > 1
+            stage_target = f"@{stage_qual}/{table_name}/" if is_chunked else f"@{stage_qual}"
+            for pf in part_paths:
+                abs_path = str(pf.resolve())
+                put_sql = f"PUT file://{abs_path} {stage_target} AUTO_COMPRESS=FALSE OVERWRITE=TRUE;"
+                self._execute_sql(put_sql)
+                staged_paths.append(f"{stage_target}/{pf.name}".replace("//", "/"))
+            label = f"{table_name}/ ({len(part_paths)} chunks)" if is_chunked else f"{table_name}.parquet"
+            console.print(f"  ✓ Staged [green]{label}[/green]")
 
         return staged_paths
 
@@ -229,8 +233,8 @@ class SnowflakeExporter(BaseExporter):
 
         console.print(f"\n❄️  [bold cyan]Creating tables in Snowflake:[/bold cyan] {self.database}.{self.schema_name}")
 
-        for pf in self.config.parquet_files:
-            table_name = pf.stem
+        for table_name, part_paths in self.config.table_sources.items():
+            is_chunked = len(part_paths) > 1
             # 1. Create Table DDL
             create_sql = self.ddl_gen.generate_create_table_sql(
                 table_name=table_name,
@@ -242,18 +246,30 @@ class SnowflakeExporter(BaseExporter):
             self._execute_sql(create_sql)
 
             # 2. Bulk load with COPY INTO
+            stage_src = f"@{stage_qual}/{table_name}/" if is_chunked else f"@{stage_qual}/{table_name}.parquet"
             copy_sql = (
                 f"COPY INTO {self.database}.{self.schema_name}.{table_name} "
-                f"FROM @{stage_qual}/{table_name}.parquet "
+                f"FROM {stage_src} "
                 f"FILE_FORMAT = (TYPE = PARQUET) MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;"
             )
             self._execute_sql(copy_sql)
             loaded_tables.append(table_name)
             console.print(f"  ✓ Loaded table [green]{self.database}.{self.schema_name}.{table_name}[/green]")
 
+            # 2b. Apply Snowflake PII / sensitivity column tags (if tag objects exist)
+            for tag_sql in self.ddl_gen.generate_column_tags_sql(
+                table_name=table_name,
+                dialect="snowflake",
+                catalog_or_project=self.database,  # type: ignore[arg-type]
+                schema_or_dataset=self.schema_name,  # type: ignore[arg-type]
+            ):
+                try:
+                    self._execute_sql(tag_sql)
+                except Exception:
+                    pass
+
         # 3. Apply Foreign Key constraints
-        for pf in self.config.parquet_files:
-            table_name = pf.stem
+        for table_name in self.config.table_sources.keys():
             fk_sqls = self.ddl_gen.generate_foreign_keys_sql(
                 table_name=table_name,
                 dialect="snowflake",
@@ -366,5 +382,91 @@ class SnowflakeExporter(BaseExporter):
             duration_seconds=round(elapsed, 2),
             destination=f"{self.database}.{self.schema_name}",
             metadata={"stage": self.stage_name, "warehouse": self.warehouse},
+        )
+
+    def setup_stream(self) -> None:
+        """Initialize Snowflake database/schema for direct DataFrame streaming."""
+        self.validate_prerequisites()
+        self._stream_start = time.time()
+        self._stream_rows = 0
+        try:
+            self._execute_sql(f"CREATE DATABASE IF NOT EXISTS {self.database};")
+        except Exception:
+            pass
+        self._execute_sql(f"CREATE SCHEMA IF NOT EXISTS {self.database}.{self.schema_name};")
+        console.print(f"\n❄️  [bold cyan]Streaming directly to Snowflake:[/bold cyan] {self.database}.{self.schema_name}")
+
+    def ingest_chunk(self, table_name: str, df: Any, chunk_idx: int) -> None:
+        """Stream a Polars DataFrame chunk directly into Snowflake via write_pandas."""
+        if df is None or df.height == 0:
+            return
+        from snowflake.connector.pandas_tools import write_pandas
+
+        conn = self._get_connection()
+        if chunk_idx == 0:
+            if table_name in self.ddl_gen.tables:
+                create_sql = self.ddl_gen.generate_create_table_sql(
+                    table_name=table_name,
+                    dialect="snowflake",
+                    catalog_or_project=self.database,  # type: ignore[arg-type]
+                    schema_or_dataset=self.schema_name,  # type: ignore[arg-type]
+                    replace=True,
+                )
+                self._execute_sql(create_sql)
+                auto_create = False
+            else:
+                auto_create = True
+        else:
+            auto_create = False
+
+        write_pandas(
+            conn=conn,
+            df=df.to_pandas(),
+            table_name=table_name,
+            database=self.database,
+            schema=self.schema_name,
+            auto_create_table=auto_create,
+            quote_identifiers=False,
+        )
+        self._stream_rows += df.height
+
+    def finalize_stream(self, loaded_tables: list[str]) -> ExportResult:
+        """Apply FK constraints, analytical views, and close Snowflake streaming connection."""
+        created_views: list[str] = []
+        try:
+            for table_name in loaded_tables:
+                if table_name in self.ddl_gen.tables:
+                    for fk_sql in self.ddl_gen.generate_foreign_keys_sql(
+                        table_name=table_name,
+                        dialect="snowflake",
+                        catalog_or_project=self.database,  # type: ignore[arg-type]
+                        schema_or_dataset=self.schema_name,  # type: ignore[arg-type]
+                    ):
+                        try:
+                            self._execute_sql(fk_sql)
+                        except Exception:
+                            pass
+            created_views = self.create_views()
+        finally:
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
+
+        elapsed = time.time() - self._stream_start
+        console.print(
+            f"\n[bold green]✓ Direct Snowflake stream complete![/bold green] "
+            f"{len(loaded_tables)} tables, {self._stream_rows:,} rows in {elapsed:.1f}s"
+        )
+        return ExportResult(
+            target="snowflake",
+            tables_exported=loaded_tables,
+            total_rows=self._stream_rows,
+            views_created=created_views,
+            duration_seconds=round(elapsed, 2),
+            destination=f"{self.database}.{self.schema_name}",
+            metadata={"warehouse": self.warehouse, "streamed": True},
         )
 

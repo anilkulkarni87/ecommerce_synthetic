@@ -725,20 +725,20 @@ html_template = '''<!DOCTYPE html>
           </h3>
           <div class="space-y-3 font-mono text-xs text-slate-300">
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Generate Full Dataset:</span>
-              <span class="text-brand-300">ecommerce-synth generate --tier small</span>
+              <span class="text-slate-500 block mb-1"># Generate Full Dataset (Chunked for 50M+ scale):</span>
+              <span class="text-brand-300">ecommerce-synth generate --tier large --chunk-size 500000</span>
             </div>
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Validate Referential FK Integrity:</span>
-              <span class="text-emerald-400">ecommerce-synth validate ./output/small_run/</span>
+              <span class="text-slate-500 block mb-1"># Stream Directly to DB (No Local Parquet Files):</span>
+              <span class="text-emerald-400">ecommerce-synth generate --tier medium --stream-to duckdb --database ./live.duckdb</span>
             </div>
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Preview Sample Table Data:</span>
-              <span class="text-cyan-300">ecommerce-synth preview ./output/small_run/ orders_online -n 5</span>
+              <span class="text-slate-500 block mb-1"># Global Regions + GDPR/CCPA Compliance + Identity Noise:</span>
+              <span class="text-cyan-300">ecommerce-synth generate --tier small --regions US,GB,DE,JP --compliance --identity-noise 0.15</span>
             </div>
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Stream Real-Time Events:</span>
-              <span class="text-amber-400">ecommerce-synth stream ./output/small_run/ --speed 100</span>
+              <span class="text-slate-500 block mb-1"># Validate Referential Integrity & Stream Events:</span>
+              <span class="text-amber-400">ecommerce-synth validate ./output/small_run/ &amp;&amp; ecommerce-synth stream ./output/small_run/ --speed 100</span>
             </div>
           </div>
         </div>

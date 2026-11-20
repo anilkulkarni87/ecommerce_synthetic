@@ -26,7 +26,7 @@ from .generators.product_generator import ProductGenerator
 from .generators.review_generator import ReviewGenerator
 from .generators.store_generator import StoreGenerator
 from .generators.support_generator import SupportGenerator
-from .utils.writer import write_manifest, write_parquet
+from .utils.writer import ChunkedParquetWriter, write_manifest, write_parquet
 
 console = Console()
 
@@ -34,10 +34,12 @@ console = Console()
 class Orchestrator:
     """Coordinates all generators and manages the generation pipeline."""
 
-    def __init__(self, config: GenerationConfig):
+    def __init__(self, config: GenerationConfig, stream_exporter: Any = None):
         self.config = config
+        self.stream_exporter = stream_exporter
         self.data: dict[str, pl.DataFrame] = {}
         self.file_stats: list[dict[str, Any]] = []
+        self.streamed_tables: list[str] = []
 
     def run(self, only: list[str] | None = None) -> dict[str, pl.DataFrame]:
         """Execute the full generation pipeline.
@@ -50,6 +52,9 @@ class Orchestrator:
 
         # Display run info
         self._print_header()
+
+        if self.stream_exporter is not None:
+            self.stream_exporter.setup_stream()
 
         # 1. Products (fixed dimension, no deps)
         console.print("\n[bold]Phase 1: Dimensions[/bold]")
@@ -147,8 +152,12 @@ class Orchestrator:
             }, only
         )
 
-        # Write manifest
+        # Finalize stream or write local manifest
         elapsed = time.time() - start_time
+        if self.stream_exporter is not None:
+            self.stream_exporter.finalize_stream(self.streamed_tables)
+            return self.data
+
         console.print(f"\n[bold]Writing manifest...[/bold]")
         write_manifest(
             output_dir=self.config.output_dir,
@@ -161,6 +170,8 @@ class Orchestrator:
             file_stats=self.file_stats,
             generation_time=elapsed,
             fraud_rate=self.config.fraud_rate,
+            regions=self.config.regions,
+            chunk_size=self.config.chunk_size,
         )
 
         self._print_summary(elapsed)
@@ -173,7 +184,7 @@ class Orchestrator:
         deps: dict[str, Any],
         only: list[str] | None,
     ) -> None:
-        """Generate data for a domain, write to Parquet, store in self.data."""
+        """Generate data for a domain, write to Parquet (chunked if large), store in self.data."""
 
         # Check if this domain is in the 'only' filter
         if only and domain not in only:
@@ -183,25 +194,65 @@ class Orchestrator:
                 return
 
         gen = generator_cls(self.config)
+        chunk_size = getattr(self.config, "chunk_size", 500_000)
+
+        # Streaming chunked generator path (keeps RAM bounded at 50M+ rows)
+        if hasattr(gen, "iter_generate"):
+            if self.stream_exporter is not None:
+                chunk_idx = 0
+                total_rows = 0
+                last_chunk = None
+                for chunk_df in gen.iter_generate(chunk_size=chunk_size, **deps):
+                    self.stream_exporter.ingest_chunk(domain, chunk_df, chunk_idx)
+                    total_rows += chunk_df.height
+                    last_chunk = chunk_df
+                    chunk_idx += 1
+                self.streamed_tables.append(domain)
+                console.print(f"  ✓ [green]Streamed {domain}[/green] — {total_rows:,} rows ({chunk_idx} chunks)")
+                self.data[domain] = last_chunk if (chunk_idx == 1 and last_chunk is not None) else pl.DataFrame()
+                return
+
+            writer = ChunkedParquetWriter(self.config.output_dir, domain)
+            last_chunk = None
+            for chunk_df in gen.iter_generate(chunk_size=chunk_size, **deps):
+                writer.write_chunk(chunk_df)
+                last_chunk = chunk_df
+            stats = writer.finalize()
+            self.file_stats.append(stats)
+            if stats["chunks"] == 1 and last_chunk is not None:
+                self.data[domain] = last_chunk
+            else:
+                self.data[domain] = pl.DataFrame()
+            return
+
         result = gen.generate(**deps)
+
+        def _persist_or_stream(name: str, df: pl.DataFrame) -> None:
+            self.data[name] = df
+            if hasattr(df, '__dict__') and '_personas' in df.__dict__:
+                self.data[name].__dict__['_personas'] = df.__dict__['_personas']
+
+            if self.stream_exporter is not None:
+                chunk_idx = 0
+                if df.height == 0:
+                    self.stream_exporter.ingest_chunk(name, df, 0)
+                else:
+                    for offset in range(0, df.height, chunk_size):
+                        self.stream_exporter.ingest_chunk(name, df.slice(offset, chunk_size), chunk_idx)
+                        chunk_idx += 1
+                self.streamed_tables.append(name)
+                console.print(f"  ✓ [green]Streamed {name}[/green] — {df.height:,} rows")
+            else:
+                stats = write_parquet(
+                    df, self.config.output_dir, f"{name}.parquet", chunk_size=chunk_size
+                )
+                self.file_stats.append(stats)
 
         if isinstance(result, dict):
             for name, df in result.items():
-                self.data[name] = df
-                # Transfer persona metadata if present
-                if hasattr(df, '__dict__') and '_personas' in df.__dict__:
-                    self.data[name].__dict__['_personas'] = df.__dict__['_personas']
-
-                stats = write_parquet(df, self.config.output_dir, f"{name}.parquet")
-                self.file_stats.append(stats)
+                _persist_or_stream(name, df)
         else:
-            self.data[domain] = result
-            # Transfer persona metadata if present
-            if hasattr(result, '__dict__') and '_personas' in result.__dict__:
-                self.data[domain].__dict__['_personas'] = result.__dict__['_personas']
-
-            stats = write_parquet(result, self.config.output_dir, f"{domain}.parquet")
-            self.file_stats.append(stats)
+            _persist_or_stream(domain, result)
 
     def _print_header(self) -> None:
         """Print run configuration."""
@@ -210,9 +261,15 @@ class Orchestrator:
         table.add_column("Value", style="green")
         table.add_row("Tier", self.config.tier_name.upper())
         table.add_row("Seed", str(self.config.seed))
+        table.add_row("Regions", ", ".join(self.config.regions))
+        table.add_row("Chunk Size", f"{self.config.chunk_size:,} rows")
         table.add_row("Date Range", f"{self.config.date_range.start} → {self.config.date_range.end}")
         table.add_row("Output", str(self.config.output_dir))
         table.add_row("Fraud Rate", f"{self.config.fraud_rate:.1%}")
+        if self.config.identity_noise > 0:
+            table.add_row("Identity Noise", f"{self.config.identity_noise:.1%}")
+        if self.config.compliance_mode:
+            table.add_row("Compliance Mode", "Enabled (GDPR/CCPA Consent)")
         table.add_row("Target Customers", f"{self.config.tier.customers:,}")
         table.add_row("Target Online Orders", f"{self.config.tier.online_orders:,}")
         table.add_row("Target In-Store Txns", f"{self.config.tier.instore_transactions:,}")

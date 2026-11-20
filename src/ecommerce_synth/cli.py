@@ -29,17 +29,23 @@ def generate(
     seed: int = typer.Option(42, help="Random seed for reproducibility"),
     fraud_rate: float = typer.Option(None, help="Fraud injection rate (0.0-1.0)"),
     identity_noise: float = typer.Option(None, "--identity-noise", help="Duplicate/messy customer identity rate (0.0-1.0) for entity resolution"),
+    chunk_size: int = typer.Option(500_000, "--chunk-size", help="Max rows per Parquet chunk file (streams large tables like 50M+ clickstream)"),
+    regions: str = typer.Option(None, "--regions", help="Comma-separated ISO country codes (e.g. US,GB,DE,JP) or 'global'"),
+    compliance: bool = typer.Option(False, "--compliance", help="Generate GDPR/CCPA consent ledger & privacy compliance metadata"),
     only: str = typer.Option(None, help="Comma-separated list of domains to generate"),
     incremental: str = typer.Option(None, "--incremental", help="Path to existing dataset directory for incremental generation"),
     days: int = typer.Option(1, "--days", help="Number of days of incremental data to generate"),
     daily_batches: bool = typer.Option(False, "--daily-batches", help="Simulate sequential daily batches"),
     duckdb: bool = typer.Option(False, "--duckdb", help="Also export all tables to a standalone ecommerce.duckdb database"),
     export_target: str = typer.Option(None, "--export", "-e", help="Auto-export to target: duckdb, databricks, snowflake, bigquery"),
+    stream_to: str = typer.Option(None, "--stream-to", help="Stream chunks directly to warehouse without saving local Parquet files: duckdb, databricks, snowflake, bigquery"),
     catalog: str = typer.Option(None, "--catalog", help="Target catalog/database name"),
     schema: str = typer.Option(None, "--schema", "-s", help="Target schema/dataset name"),
+    database: str = typer.Option(None, "--database", help="Target Snowflake database or DuckDB file path"),
     warehouse: str = typer.Option(None, "--warehouse", "-w", help="Target warehouse ID/name"),
     project: str = typer.Option(None, "--project", "-p", help="Target GCP project ID for BigQuery"),
     dataset: str = typer.Option(None, "--dataset", "-d", help="Target BigQuery dataset name"),
+    profile: str = typer.Option(None, "--profile", help="Connection profile name (Databricks or Snowflake)"),
 ) -> None:
     """Generate synthetic ecommerce data at the specified volume tier."""
 
@@ -63,13 +69,48 @@ def generate(
             output_dir=output,
             fraud_rate=fraud_rate,
             identity_noise=identity_noise,
+            chunk_size=chunk_size,
+            regions=regions,
+            compliance_mode=compliance,
         )
 
         only_list = [s.strip() for s in only.split(",")] if only else None
 
-        orchestrator = Orchestrator(config)
+        stream_exporter = None
+        if stream_to:
+            from .exporters import (
+                BigQueryExporter,
+                DatabricksExporter,
+                DuckDBExporter,
+                ExportConfig,
+                SnowflakeExporter,
+            )
+            st = stream_to.lower().strip()
+            exp_cfg = ExportConfig(
+                target=st,
+                data_dir=None,
+                catalog=catalog,
+                schema_name=schema,
+                database=database,
+                warehouse=warehouse,
+                project=project,
+                dataset=dataset,
+                extra_params={"profile": profile} if profile else {},
+            )
+            exporter_map = {
+                "duckdb": DuckDBExporter,
+                "databricks": DatabricksExporter,
+                "snowflake": SnowflakeExporter,
+                "bigquery": BigQueryExporter,
+            }
+            if st not in exporter_map:
+                console.print(f"[red]Error: Unknown --stream-to target '{stream_to}'. Valid: duckdb, databricks, snowflake, bigquery[/red]")
+                raise typer.Exit(1)
+            stream_exporter = exporter_map[st](exp_cfg)
+
+        orchestrator = Orchestrator(config, stream_exporter=stream_exporter)
         orchestrator.run(only=only_list)
-        target_dir = config.output_dir
+        target_dir = None if stream_exporter else config.output_dir
 
     # Handle post-generation exports
     target_to_export = export_target or ("duckdb" if duckdb else None)
@@ -155,9 +196,10 @@ def validate(
 
     def get_table(name: str) -> pl.DataFrame | None:
         if name not in tables:
-            f = path / f"{name}.parquet"
-            if f.exists():
-                tables[name] = pl.read_parquet(f)
+            from .utils.writer import read_table_parquet
+            df = read_table_parquet(path, name)
+            if df is not None:
+                tables[name] = df
             else:
                 return None
         return tables[name]
@@ -340,19 +382,23 @@ def preview(
     """Preview rows and schema of a generated Parquet file."""
     import polars as pl
 
+    from .utils.writer import get_table_parquet_paths, read_table_parquet
+
     path = Path(data_dir)
     table_name = table.replace(".parquet", "")
-    file_path = path / f"{table_name}.parquet"
+    part_paths = get_table_parquet_paths(path, table_name)
 
-    if not file_path.exists():
-        console.print(f"[red]Error: Table file not found: {file_path}[/red]")
-        available = [p.stem for p in path.glob("*.parquet")]
+    if not part_paths:
+        console.print(f"[red]Error: Table not found: {table_name}[/red]")
+        available = [p.stem for p in path.glob("*.parquet")] + [
+            d.name for d in path.iterdir() if d.is_dir() and list(d.glob("part-*.parquet"))
+        ]
         if available:
-            console.print(f"[yellow]Available tables: {', '.join(sorted(available))}[/yellow]")
+            console.print(f"[yellow]Available tables: {', '.join(sorted(set(available)))}[/yellow]")
         raise typer.Exit(1)
 
-    df = pl.read_parquet(file_path)
-    file_size_kb = file_path.stat().st_size / 1024
+    df = read_table_parquet(path, table_name)
+    file_size_kb = sum(p.stat().st_size for p in part_paths) / 1024
     size_str = f"{file_size_kb / 1024:.2f} MB" if file_size_kb >= 1024 else f"{file_size_kb:.1f} KB"
 
     console.print(f"\n📊 [bold cyan]{table_name}.parquet[/bold cyan] ({df.height:,} rows, {df.width} columns, {size_str})\n")

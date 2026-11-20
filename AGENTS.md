@@ -31,7 +31,7 @@ All CLI commands are accessible via `ecommerce-synth <command>` or `python -m ec
 
 | Command | Usage | Description |
 |---|---|---|
-| `generate` | `ecommerce-synth generate --tier <tier> [--export <target>] [--duckdb]` | Generates full omnichannel dataset |
+| `generate` | `ecommerce-synth generate --tier <tier> [--export <target>] [--stream-to <target>] [--chunk-size 500000] [--identity-noise 0.15] [--regions US,GB,DE] [--compliance]` | Generates full omnichannel dataset (local Parquet or direct-to-DB stream) |
 | `export` | `ecommerce-synth export <data_dir> --target [duckdb\|databricks\|snowflake\|bigquery]` | Automated staging, DDL, constraints & bulk loading |
 | `export-duckdb` | `ecommerce-synth export-duckdb <data_dir> [--output <path>]` | Bundles all 19 tables into DuckDB |
 | `validate` | `ecommerce-synth validate <data_dir>` | Runs 29 referential integrity FK checks |

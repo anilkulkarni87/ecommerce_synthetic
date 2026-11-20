@@ -54,14 +54,34 @@ class CustomerGenerator(BaseGenerator):
     """Generate customers and addresses."""
 
     def generate(self, **deps) -> dict[str, pl.DataFrame]:
+        from faker import Faker
+
         n = self.config.tier.customers
         persona_engine = PersonaEngine(self.config, self.rng)
         identity_noise = getattr(self.config, "identity_noise", 0.0) or 0.0
+        regions = getattr(self.config, "regions", ["US"]) or ["US"]
+        region_configs = getattr(self.config, "region_configs", {}) or {}
+        compliance_mode = getattr(self.config, "compliance_mode", False)
+        is_multi_region = regions != ["US"]
+
+        # Cache localized Faker instances if multi-region is enabled
+        locale_fakers: dict[str, Faker] = {}
+        if is_multi_region:
+            for r_code in regions:
+                rc = region_configs.get(r_code)
+                loc = rc.faker_locale if rc else "en_US"
+                f = Faker(loc)
+                f.seed_instance(self.config.seed)
+                locale_fakers[r_code] = f
+        region_weights = [
+            region_configs[r].weight if r in region_configs else 1.0 for r in regions
+        ]
 
         customers: list[dict] = []
         addresses: list[dict] = []
         personas: list[CustomerPersona] = []
         ground_truth: list[dict] = []
+        consents: list[dict] = []
         canonical_pool: list[tuple[dict, dict]] = []
 
         states = [s for s, _ in US_STATES_WEIGHTED]
@@ -71,6 +91,11 @@ class CustomerGenerator(BaseGenerator):
             cust_id = self._uuid()
             persona = persona_engine.assign(i, n)
             personas.append(persona)
+
+            cust_country = (
+                self._pick_weighted(regions, region_weights) if is_multi_region else "US"
+            )
+            loc_faker = locale_fakers.get(cust_country, self.faker)
 
             if identity_noise > 0 and canonical_pool and self.rng.random() < identity_noise:
                 orig_cust, orig_addr = self.rng.choice(canonical_pool)
@@ -93,7 +118,7 @@ class CustomerGenerator(BaseGenerator):
                         "city": mutated_addr["city"],
                         "state": mutated_addr["state"],
                         "zip_code": mutated_addr["zip_code"],
-                        "country": "US",
+                        "country": orig_addr.get("country", "US"),
                         "is_default": True,
                     })
                 continue
@@ -103,22 +128,21 @@ class CustomerGenerator(BaseGenerator):
 
             # Use gender-appropriate names
             if gender == "M":
-                first_name = self.faker.first_name_male()
+                first_name = loc_faker.first_name_male()
             elif gender == "F":
-                first_name = self.faker.first_name_female()
+                first_name = loc_faker.first_name_female()
             else:
-                first_name = self.faker.first_name()
-            last_name = self.faker.last_name()
+                first_name = loc_faker.first_name()
+            last_name = loc_faker.last_name()
 
             # Fraudsters with synthetic identity get mismatched names
             if persona.is_fraudster and persona.fraud_type == "synthetic_identity":
-                # Mix parts from different names
-                first_name = self.faker.first_name()
-                last_name = self.faker.last_name()
+                first_name = loc_faker.first_name()
+                last_name = loc_faker.last_name()
 
             email = f"{first_name.lower()}.{last_name.lower()}{self.rng.randint(1, 9999)}@{self.rng.choice(['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com', 'aol.com', 'protonmail.com', 'mail.com'])}"
 
-            phone = self.faker.phone_number()
+            phone = loc_faker.phone_number()
 
             # Age distribution: 18-85, peaked around 30-45
             age = max(18, min(85, int(self.rng.gauss(35, 12))))
@@ -142,6 +166,28 @@ class CustomerGenerator(BaseGenerator):
             if persona.persona_name == "one_and_done" and self.rng.random() < 0.5:
                 is_active = False
 
+            # Compliance: GDPR/CCPA consent ledger & ~2% Right-to-Erasure tombstones
+            if compliance_mode:
+                rc = region_configs.get(cust_country)
+                framework = rc.privacy_framework if rc else "CCPA"
+                for purpose in ("marketing_email", "analytics_cookies", "personalization"):
+                    status = "granted" if self.rng.random() < 0.78 else "withdrawn"
+                    consents.append({
+                        "consent_id": self._uuid(),
+                        "customer_id": cust_id,
+                        "jurisdiction": framework,
+                        "purpose": purpose,
+                        "status": status,
+                        "updated_at": created_at,
+                    })
+                # 2% DSAR Right-to-Erasure tombstone (anonymizes PII, keeps customer_id for FK)
+                if self.rng.random() < 0.02:
+                    first_name = "REDACTED"
+                    last_name = "REDACTED"
+                    email = f"erased_{cust_id[:8]}@anonymized.local"
+                    phone = "REDACTED"
+                    is_active = False
+
             cust_row = {
                 "customer_id": cust_id,
                 "first_name": first_name,
@@ -158,16 +204,21 @@ class CustomerGenerator(BaseGenerator):
             customers.append(cust_row)
 
             # Addresses: 1-3 per customer
-            state = self._pick_weighted(states, state_weights)
-            city = self.faker.city()
-            street = self.faker.street_address()
-            zip_code = self.faker.zipcode_in_state(state)
+            if cust_country == "US":
+                state = self._pick_weighted(states, state_weights)
+                zip_code = self.faker.zipcode_in_state(state)
+            else:
+                state = getattr(loc_faker, "state_abbr", lambda: cust_country)() if hasattr(loc_faker, "state_abbr") else cust_country
+                zip_code = loc_faker.postcode()
+            city = loc_faker.city()
+            street = loc_faker.street_address()
 
             primary_addr = {
                 "street_address": street,
                 "city": city,
                 "state": state,
                 "zip_code": zip_code,
+                "country": cust_country,
             }
             if identity_noise > 0:
                 canonical_pool.append((cust_row, primary_addr))
@@ -189,7 +240,7 @@ class CustomerGenerator(BaseGenerator):
                     "city": city,
                     "state": state,
                     "zip_code": zip_code,
-                    "country": "US",
+                    "country": cust_country,
                     "is_default": True,
                 })
 
@@ -246,6 +297,11 @@ class CustomerGenerator(BaseGenerator):
         if identity_noise > 0:
             result["identity_ground_truth"] = pl.DataFrame(ground_truth).cast({
                 "is_duplicate": pl.Boolean,
+            })
+
+        if compliance_mode and consents:
+            result["customer_consents"] = pl.DataFrame(consents).cast({
+                "updated_at": pl.Datetime,
             })
 
         return result

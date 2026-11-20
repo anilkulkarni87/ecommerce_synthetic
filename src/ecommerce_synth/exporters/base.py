@@ -18,7 +18,7 @@ class ExportConfig:
     """Unified configuration for exporting synthetic data to any warehouse target."""
 
     target: str
-    data_dir: Path | str
+    data_dir: Path | str | None = None
     catalog: str | None = None          # Databricks catalog / Snowflake database
     schema_name: str | None = None      # Schema or dataset name
     database: str | None = None         # Snowflake database / DuckDB path
@@ -31,18 +31,40 @@ class ExportConfig:
     extra_params: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        self.data_dir = Path(self.data_dir)
-        if not self.data_dir.exists():
-            raise FileNotFoundError(f"Data directory does not exist: {self.data_dir}")
+        if self.data_dir is not None:
+            self.data_dir = Path(self.data_dir)
+            if not self.data_dir.exists():
+                raise FileNotFoundError(f"Data directory does not exist: {self.data_dir}")
 
     @property
     def parquet_files(self) -> list[Path]:
         """Return list of .parquet files in data_dir, excluding hidden files."""
+        if self.data_dir is None:
+            return []
         return sorted([p for p in self.data_dir.glob("*.parquet") if not p.name.startswith(".")])
+
+    @property
+    def table_sources(self) -> dict[str, list[Path]]:
+        """Map each table_name -> list of Parquet file paths (supports single files and chunked dirs)."""
+        if self.data_dir is None:
+            return {}
+        sources: dict[str, list[Path]] = {}
+        for p in sorted(self.data_dir.iterdir()):
+            if p.name.startswith(".") or p.name.startswith("_"):
+                continue
+            if p.is_file() and p.suffix == ".parquet":
+                sources[p.stem] = [p]
+            elif p.is_dir():
+                parts = sorted(p.glob("part-*.parquet"))
+                if parts:
+                    sources[p.name] = parts
+        return sources
 
     @property
     def manifest(self) -> dict[str, Any] | None:
         """Load _manifest.json if present."""
+        if self.data_dir is None:
+            return None
         manifest_path = self.data_dir / "_manifest.json"
         if manifest_path.exists():
             with open(manifest_path) as f:
@@ -98,4 +120,16 @@ class BaseExporter(ABC):
     def export(self) -> ExportResult:
         """Run the full end-to-end export pipeline."""
         pass
+
+    def setup_stream(self) -> None:
+        """Initialize target database/schema before streaming chunks."""
+        self.validate_prerequisites()
+
+    def ingest_chunk(self, table_name: str, df: Any, chunk_idx: int) -> None:
+        """Stream a single DataFrame chunk directly into the target database."""
+        raise NotImplementedError(f"Direct streaming not implemented for {self.config.target}")
+
+    def finalize_stream(self, loaded_tables: list[str]) -> ExportResult:
+        """Apply constraints, create views, and close streaming connections."""
+        raise NotImplementedError(f"Direct streaming not implemented for {self.config.target}")
 

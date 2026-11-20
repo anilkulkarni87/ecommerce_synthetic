@@ -72,6 +72,19 @@ ecommerce-synth generate --tier small --only customers,products,orders_online
 
 # Adjust fraud injection rate (default: 0.02)
 ecommerce-synth generate --tier small --fraud-rate 0.05
+
+# Identity Resolution messy-data mode (injects duplicate profiles + identity_ground_truth.parquet)
+ecommerce-synth generate --tier small --identity-noise 0.15
+
+# Global multi-region localization + GDPR/CCPA consent ledger (customer_consents.parquet)
+ecommerce-synth generate --tier small --regions US,GB,DE,JP --compliance
+
+# Chunked Parquet persistence for 50M+ row scale (writes table/part-00000.parquet, ...)
+ecommerce-synth generate --tier large --chunk-size 500000
+
+# Direct-to-database streaming WITHOUT saving local Parquet files
+ecommerce-synth generate --tier medium --stream-to duckdb --database ./live.duckdb --schema ecommerce
+ecommerce-synth generate --tier large --stream-to snowflake --database ECOM_DB --schema PROD
 ```
 
 ### Validate Referential Integrity

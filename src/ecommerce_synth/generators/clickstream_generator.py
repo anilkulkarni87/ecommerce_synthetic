@@ -107,15 +107,18 @@ PAGE_URLS = [
 class ClickstreamGenerator(BaseGenerator):
     """Generate web clickstream events."""
 
-    def generate(
+    def iter_generate(
         self,
         *,
         customers: pl.DataFrame,
         products: pl.DataFrame,
         orders_online: pl.DataFrame | None = None,
+        chunk_size: int | None = None,
         **deps,
-    ) -> pl.DataFrame:
+    ):
+        """Yield clickstream DataFrame chunks to support 50M+ row generation with bounded RAM."""
         target = self.config.tier.clickstream_events
+        c_size = chunk_size or getattr(self.config, "chunk_size", 500_000) or 500_000
         personas: dict[str, CustomerPersona] = customers.__dict__.get("_personas", {})
         customer_ids = customers["customer_id"].to_list()
         product_list = products.filter(pl.col("is_active")).to_dicts()
@@ -123,6 +126,23 @@ class ClickstreamGenerator(BaseGenerator):
 
         records: list[dict] = []
         event_count = 0
+
+        def _flush_chunk() -> pl.DataFrame:
+            df = pl.DataFrame(
+                records,
+                schema_overrides={
+                    "product_id": pl.String,
+                    "search_query": pl.String,
+                    "cart_value": pl.Float64,
+                },
+            )
+            if df.height > 0:
+                df = df.cast({
+                    "event_timestamp": pl.Datetime,
+                    "cart_value": pl.Float64,
+                })
+            records.clear()
+            return df
 
         # 1. Generate linked purchase sessions for actual online orders
         has_orders = orders_online is not None and not orders_online.is_empty()
@@ -156,6 +176,9 @@ class ClickstreamGenerator(BaseGenerator):
                 )
                 records.extend(session_records)
                 event_count += len(session_records)
+
+                if len(records) >= c_size:
+                    yield _flush_chunk()
 
         # 2. Fill remaining budget with non-converting / browsing sessions
         while event_count < target:
@@ -204,20 +227,30 @@ class ClickstreamGenerator(BaseGenerator):
             records.extend(session_records)
             event_count += len(session_records)
 
-        df = pl.DataFrame(
-            records,
-            schema_overrides={
-                "product_id": pl.String,
-                "search_query": pl.String,
-                "cart_value": pl.Float64,
-            },
+            if len(records) >= c_size:
+                yield _flush_chunk()
+
+        if records or event_count == 0:
+            yield _flush_chunk()
+
+    def generate(
+        self,
+        *,
+        customers: pl.DataFrame,
+        products: pl.DataFrame,
+        orders_online: pl.DataFrame | None = None,
+        **deps,
+    ) -> pl.DataFrame:
+        chunks = list(
+            self.iter_generate(
+                customers=customers,
+                products=products,
+                orders_online=orders_online,
+                chunk_size=self.config.tier.clickstream_events + 1,
+                **deps,
+            )
         )
-        if df.height > 0:
-            df = df.cast({
-                "event_timestamp": pl.Datetime,
-                "cart_value": pl.Float64,
-            })
-        return df
+        return pl.concat(chunks) if len(chunks) > 1 else chunks[0]
 
     def _build_session_records(
         self,

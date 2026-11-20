@@ -684,20 +684,20 @@
           </h3>
           <div class="space-y-3 font-mono text-xs text-slate-300">
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Generate Full Dataset:</span>
-              <span class="text-brand-300">ecommerce-synth generate --tier small</span>
+              <span class="text-slate-500 block mb-1"># Generate Full Dataset (Chunked for 50M+ scale):</span>
+              <span class="text-brand-300">ecommerce-synth generate --tier large --chunk-size 500000</span>
             </div>
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Validate Referential FK Integrity:</span>
-              <span class="text-emerald-400">ecommerce-synth validate ./output/small_run/</span>
+              <span class="text-slate-500 block mb-1"># Stream Directly to DB (No Local Parquet Files):</span>
+              <span class="text-emerald-400">ecommerce-synth generate --tier medium --stream-to duckdb --database ./live.duckdb</span>
             </div>
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Preview Sample Table Data:</span>
-              <span class="text-cyan-300">ecommerce-synth preview ./output/small_run/ orders_online -n 5</span>
+              <span class="text-slate-500 block mb-1"># Global Regions + GDPR/CCPA Compliance + Identity Noise:</span>
+              <span class="text-cyan-300">ecommerce-synth generate --tier small --regions US,GB,DE,JP --compliance --identity-noise 0.15</span>
             </div>
             <div class="bg-surface-900 p-3 rounded-lg border border-slate-700/80">
-              <span class="text-slate-500 block mb-1"># Stream Real-Time Events:</span>
-              <span class="text-amber-400">ecommerce-synth stream ./output/small_run/ --speed 100</span>
+              <span class="text-slate-500 block mb-1"># Validate Referential Integrity & Stream Events:</span>
+              <span class="text-amber-400">ecommerce-synth validate ./output/small_run/ &amp;&amp; ecommerce-synth stream ./output/small_run/ --speed 100</span>
             </div>
           </div>
         </div>
@@ -747,32 +747,44 @@
         "first_name": {
           "type": "string",
           "nullable": false,
-          "description": "Customer given name"
+          "description": "Customer given name",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "last_name": {
           "type": "string",
           "nullable": false,
-          "description": "Customer family name"
+          "description": "Customer family name",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "email": {
           "type": "string",
           "nullable": false,
-          "description": "Unique email address, used for marketing identity stitching"
+          "description": "Unique email address, used for marketing identity stitching",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "phone": {
           "type": "string",
           "nullable": false,
-          "description": "Phone number, used for in-store POS lookup stitching"
+          "description": "Phone number, used for in-store POS lookup stitching",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "date_of_birth": {
           "type": "date",
           "nullable": false,
-          "description": "Customer date of birth (18-85)"
+          "description": "Customer date of birth (18-85)",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "gender": {
           "type": "string",
           "nullable": false,
-          "description": "Gender identity (M, F, Non-binary, Prefer not to say)"
+          "description": "Gender identity (M, F, Non-binary, Prefer not to say)",
+          "pii_classification": "INDIRECT_PII",
+          "sensitivity": "MEDIUM"
         },
         "created_at": {
           "type": "timestamp",
@@ -823,12 +835,16 @@
         "street_address": {
           "type": "string",
           "nullable": false,
-          "description": "Street line"
+          "description": "Street line",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "city": {
           "type": "string",
           "nullable": false,
-          "description": "City name"
+          "description": "City name",
+          "pii_classification": "INDIRECT_PII",
+          "sensitivity": "MEDIUM"
         },
         "state": {
           "type": "string",
@@ -838,7 +854,9 @@
         "zip_code": {
           "type": "string",
           "nullable": false,
-          "description": "Postal code"
+          "description": "Postal code",
+          "pii_classification": "INDIRECT_PII",
+          "sensitivity": "MEDIUM"
         },
         "country": {
           "type": "string",
@@ -886,12 +904,16 @@
         "price": {
           "type": "float",
           "nullable": false,
-          "description": "Retail selling price"
+          "description": "Retail selling price",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "cost": {
           "type": "float",
           "nullable": false,
-          "description": "Wholesale acquisition cost"
+          "description": "Wholesale acquisition cost",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "weight_kg": {
           "type": "float",
@@ -944,12 +966,16 @@
         "street_address": {
           "type": "string",
           "nullable": false,
-          "description": "Physical address"
+          "description": "Physical address",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "city": {
           "type": "string",
           "nullable": false,
-          "description": "City"
+          "description": "City",
+          "pii_classification": "INDIRECT_PII",
+          "sensitivity": "MEDIUM"
         },
         "state": {
           "type": "string",
@@ -959,7 +985,9 @@
         "zip_code": {
           "type": "string",
           "nullable": false,
-          "description": "Postal code"
+          "description": "Postal code",
+          "pii_classification": "INDIRECT_PII",
+          "sensitivity": "MEDIUM"
         },
         "region": {
           "type": "string",
@@ -1011,7 +1039,9 @@
         "phone_number": {
           "type": "string",
           "nullable": false,
-          "description": "Phone number for identity resolution"
+          "description": "Phone number for identity resolution",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
         },
         "created_at": {
           "type": "timestamp",
@@ -1074,32 +1104,44 @@
         "subtotal": {
           "type": "float",
           "nullable": false,
-          "description": "Items pre-discount sum"
+          "description": "Items pre-discount sum",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "discount_amount": {
           "type": "float",
           "nullable": false,
-          "description": "Promotional discounts applied"
+          "description": "Promotional discounts applied",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "tax_amount": {
           "type": "float",
           "nullable": false,
-          "description": "Sales tax calculated per state"
+          "description": "Sales tax calculated per state",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "shipping_cost": {
           "type": "float",
           "nullable": false,
-          "description": "Shipping fee"
+          "description": "Shipping fee",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "total_amount": {
           "type": "float",
           "nullable": false,
-          "description": "Final customer charged total"
+          "description": "Final customer charged total",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "payment_method": {
           "type": "string",
           "nullable": false,
-          "description": "credit_card, debit_card, paypal, apple_pay, gift_card"
+          "description": "credit_card, debit_card, paypal, apple_pay, gift_card",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "coupon_code": {
           "type": "string",
@@ -1151,7 +1193,9 @@
         "unit_price": {
           "type": "float",
           "nullable": false,
-          "description": "Selling price at time of purchase"
+          "description": "Selling price at time of purchase",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "discount_pct": {
           "type": "float",
@@ -1161,7 +1205,9 @@
         "line_total": {
           "type": "float",
           "nullable": false,
-          "description": "Line total = quantity * unit_price * (1 - discount)"
+          "description": "Line total = quantity * unit_price * (1 - discount)",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         }
       },
       "domain": "Omnichannel Sales & POS"
@@ -1214,27 +1260,37 @@
         "subtotal": {
           "type": "float",
           "nullable": false,
-          "description": "Items pre-tax sum"
+          "description": "Items pre-tax sum",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "tax_amount": {
           "type": "float",
           "nullable": false,
-          "description": "Sales tax"
+          "description": "Sales tax",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "discount_amount": {
           "type": "float",
           "nullable": false,
-          "description": "Coupon/markdown discount"
+          "description": "Coupon/markdown discount",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "total_amount": {
           "type": "float",
           "nullable": false,
-          "description": "Total payment collected"
+          "description": "Total payment collected",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "payment_method": {
           "type": "string",
           "nullable": false,
-          "description": "cash, credit_card, debit_card, mobile_pay, gift_card"
+          "description": "cash, credit_card, debit_card, mobile_pay, gift_card",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "coupon_code": {
           "type": "string",
@@ -1276,7 +1332,9 @@
         "unit_price": {
           "type": "float",
           "nullable": false,
-          "description": "Price per unit"
+          "description": "Price per unit",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         },
         "discount_pct": {
           "type": "float",
@@ -1286,7 +1344,9 @@
         "line_total": {
           "type": "float",
           "nullable": false,
-          "description": "Total for line"
+          "description": "Total for line",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
         }
       },
       "domain": "Omnichannel Sales & POS"
@@ -1353,7 +1413,9 @@
         "ip_address": {
           "type": "string",
           "nullable": false,
-          "description": "Anonymized client IP"
+          "description": "Anonymized client IP",
+          "pii_classification": "INDIRECT_PII",
+          "sensitivity": "MEDIUM"
         },
         "product_id": {
           "type": "string",

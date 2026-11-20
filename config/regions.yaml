@@ -1,0 +1,91 @@
+# Global region & localization registry
+# Used when --regions is specified (e.g. --regions US,GB,DE,JP or --regions global)
+
+regions:
+  US:
+    name: "United States"
+    faker_locale: "en_US"
+    currency: "USD"
+    fx_rate_to_usd: 1.0
+    tax_regime: "SALES_TAX"   # Tax-exclusive (added at checkout)
+    default_tax_rate: 0.07
+    timezone: "America/New_York"
+    weight: 0.40
+    privacy_framework: "CCPA"
+
+  GB:
+    name: "United Kingdom"
+    faker_locale: "en_GB"
+    currency: "GBP"
+    fx_rate_to_usd: 1.27
+    tax_regime: "VAT"         # Tax-inclusive
+    default_tax_rate: 0.20
+    timezone: "Europe/London"
+    weight: 0.15
+    privacy_framework: "UK_GDPR"
+
+  DE:
+    name: "Germany"
+    faker_locale: "de_DE"
+    currency: "EUR"
+    fx_rate_to_usd: 1.08
+    tax_regime: "VAT"
+    default_tax_rate: 0.19
+    timezone: "Europe/Berlin"
+    weight: 0.12
+    privacy_framework: "GDPR"
+
+  FR:
+    name: "France"
+    faker_locale: "fr_FR"
+    currency: "EUR"
+    fx_rate_to_usd: 1.08
+    tax_regime: "VAT"
+    default_tax_rate: 0.20
+    timezone: "Europe/Paris"
+    weight: 0.08
+    privacy_framework: "GDPR"
+
+  CA:
+    name: "Canada"
+    faker_locale: "en_CA"
+    currency: "CAD"
+    fx_rate_to_usd: 0.73
+    tax_regime: "GST"         # Tax-exclusive
+    default_tax_rate: 0.13
+    timezone: "America/Toronto"
+    weight: 0.07
+    privacy_framework: "PIPEDA"
+
+  JP:
+    name: "Japan"
+    faker_locale: "ja_JP"
+    currency: "JPY"
+    fx_rate_to_usd: 0.0067
+    tax_regime: "VAT"         # Consumption tax (inclusive)
+    default_tax_rate: 0.10
+    timezone: "Asia/Tokyo"
+    weight: 0.08
+    privacy_framework: "APPI"
+
+  AU:
+    name: "Australia"
+    faker_locale: "en_AU"
+    currency: "AUD"
+    fx_rate_to_usd: 0.65
+    tax_regime: "GST"
+    default_tax_rate: 0.10
+    timezone: "Australia/Sydney"
+    weight: 0.05
+    privacy_framework: "APP"
+
+  BR:
+    name: "Brazil"
+    faker_locale: "pt_BR"
+    currency: "BRL"
+    fx_rate_to_usd: 0.18
+    tax_regime: "VAT"
+    default_tax_rate: 0.17
+    timezone: "America/Sao_Paulo"
+    weight: 0.05
+    privacy_framework: "LGPD"

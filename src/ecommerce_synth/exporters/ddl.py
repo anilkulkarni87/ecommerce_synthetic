@@ -206,3 +206,46 @@ class DDLGenerator:
             f"FILE_FORMAT = (TYPE = PARQUET) MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;"
         )
 
+    def generate_column_tags_sql(
+        self,
+        table_name: str,
+        dialect: str,
+        catalog_or_project: str,
+        schema_or_dataset: str,
+    ) -> list[str]:
+        """Generate ALTER TABLE governance tag statements for PII/financial columns."""
+        table_meta = self.tables.get(table_name)
+        if not table_meta:
+            return []
+
+        d = dialect.lower()
+        qual = f"{catalog_or_project}.{schema_or_dataset}.{table_name}"
+        statements: list[str] = []
+
+        for col_name, cinfo in table_meta.get("columns", {}).items():
+            pii = cinfo.get("pii_classification")
+            sens = cinfo.get("sensitivity")
+            if not pii and not sens:
+                continue
+
+            if d == "databricks":
+                tags = []
+                if pii:
+                    tags.append(f"'pii_classification' = '{pii}'")
+                if sens:
+                    tags.append(f"'sensitivity' = '{sens}'")
+                statements.append(
+                    f"ALTER TABLE {qual} ALTER COLUMN {col_name} SET TAGS ({', '.join(tags)});"
+                )
+            elif d == "snowflake":
+                tags = []
+                if pii:
+                    tags.append(f"pii_classification = '{pii}'")
+                if sens:
+                    tags.append(f"sensitivity = '{sens}'")
+                statements.append(
+                    f"ALTER TABLE {qual} MODIFY COLUMN {col_name} SET TAG {', '.join(tags)};"
+                )
+
+        return statements
+

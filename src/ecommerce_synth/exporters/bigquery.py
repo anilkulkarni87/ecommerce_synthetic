@@ -73,12 +73,16 @@ class BigQueryExporter(BaseExporter):
 
         console.print(f"\n📦 [bold cyan]Staging files to GCS:[/bold cyan] gs://{self.gcs_bucket}/{self.dataset}/")
 
-        for pf in self.config.parquet_files:
-            blob = bucket.blob(f"{self.dataset}/{pf.name}")
-            blob.upload_from_filename(str(pf.resolve()))
-            uri = f"gs://{self.gcs_bucket}/{self.dataset}/{pf.name}"
-            staged_uris.append(uri)
-            console.print(f"  ✓ Staged [green]{pf.name}[/green]")
+        for table_name, part_paths in self.config.table_sources.items():
+            is_chunked = len(part_paths) > 1
+            for pf in part_paths:
+                rel = f"{table_name}/{pf.name}" if is_chunked else pf.name
+                blob = bucket.blob(f"{self.dataset}/{rel}")
+                blob.upload_from_filename(str(pf.resolve()))
+                uri = f"gs://{self.gcs_bucket}/{self.dataset}/{rel}"
+                staged_uris.append(uri)
+            label = f"{table_name}/ ({len(part_paths)} chunks)" if is_chunked else f"{table_name}.parquet"
+            console.print(f"  ✓ Staged [green]{label}[/green]")
 
         return staged_uris
 
@@ -92,25 +96,38 @@ class BigQueryExporter(BaseExporter):
 
         console.print(f"\n⚡ [bold cyan]Loading tables into BigQuery:[/bold cyan] {self.project}.{self.dataset}")
 
-        for pf in self.config.parquet_files:
-            table_name = pf.stem
+        for table_name, part_paths in self.config.table_sources.items():
+            is_chunked = len(part_paths) > 1
             table_ref = dataset_ref.table(table_name)
             table_meta = self.ddl_gen.tables.get(table_name, {})
 
-            job_config = bigquery.LoadJobConfig(
-                source_format=bigquery.SourceFormat.PARQUET,
-                write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-            )
-
             # 1. Load data
             if self.gcs_bucket:
-                uri = f"gs://{self.gcs_bucket}/{self.dataset}/{pf.name}"
+                job_config = bigquery.LoadJobConfig(
+                    source_format=bigquery.SourceFormat.PARQUET,
+                    write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+                )
+                uri = (
+                    f"gs://{self.gcs_bucket}/{self.dataset}/{table_name}/*.parquet"
+                    if is_chunked
+                    else f"gs://{self.gcs_bucket}/{self.dataset}/{table_name}.parquet"
+                )
                 load_job = client.load_table_from_uri(uri, table_ref, job_config=job_config)
+                load_job.result()
             else:
-                with open(pf, "rb") as source_file:
-                    load_job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
-
-            load_job.result()  # Wait for job to complete
+                for idx, pf in enumerate(part_paths):
+                    disposition = (
+                        bigquery.WriteDisposition.WRITE_TRUNCATE
+                        if idx == 0
+                        else bigquery.WriteDisposition.WRITE_APPEND
+                    )
+                    job_config = bigquery.LoadJobConfig(
+                        source_format=bigquery.SourceFormat.PARQUET,
+                        write_disposition=disposition,
+                    )
+                    with open(pf, "rb") as source_file:
+                        load_job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
+                    load_job.result()
 
             # 2. Enrich table description
             table = client.get_table(table_ref)
@@ -135,8 +152,7 @@ class BigQueryExporter(BaseExporter):
             console.print(f"  ✓ Loaded table [green]{self.project}.{self.dataset}.{table_name}[/green]")
 
         # 4. Apply Foreign Key constraints
-        for pf in self.config.parquet_files:
-            table_name = pf.stem
+        for table_name in self.config.table_sources.keys():
             fk_sqls = self.ddl_gen.generate_foreign_keys_sql(
                 table_name=table_name,
                 dialect="bigquery",
@@ -246,4 +262,54 @@ class BigQueryExporter(BaseExporter):
             duration_seconds=round(elapsed, 2),
             destination=f"{self.project}.{self.dataset}",
             metadata={"location": self.location, "gcs_bucket": self.gcs_bucket},
+        )
+
+    def setup_stream(self) -> None:
+        """Initialize BigQuery dataset for direct DataFrame streaming."""
+        self.validate_prerequisites()
+        from google.cloud import bigquery
+
+        self._stream_start = time.time()
+        self._stream_rows = 0
+        client = self._get_client()
+        dataset_ref = bigquery.DatasetReference(self.project, self.dataset)
+        dataset = bigquery.Dataset(dataset_ref)
+        dataset.location = self.location
+        client.create_dataset(dataset, exists_ok=True)
+        console.print(f"\n⚡ [bold cyan]Streaming directly to BigQuery:[/bold cyan] {self.project}.{self.dataset}")
+
+    def ingest_chunk(self, table_name: str, df: Any, chunk_idx: int) -> None:
+        """Stream a Polars DataFrame chunk directly into BigQuery via LoadJob."""
+        if df is None or df.height == 0:
+            return
+        from google.cloud import bigquery
+
+        client = self._get_client()
+        table_ref = bigquery.DatasetReference(self.project, self.dataset).table(table_name)
+        disposition = (
+            bigquery.WriteDisposition.WRITE_TRUNCATE
+            if chunk_idx == 0
+            else bigquery.WriteDisposition.WRITE_APPEND
+        )
+        job_config = bigquery.LoadJobConfig(write_disposition=disposition)
+        load_job = client.load_table_from_dataframe(df.to_pandas(), table_ref, job_config=job_config)
+        load_job.result()
+        self._stream_rows += df.height
+
+    def finalize_stream(self, loaded_tables: list[str]) -> ExportResult:
+        """Apply BigQuery constraints, analytical views, and return summary."""
+        created_views = self.create_views()
+        elapsed = time.time() - self._stream_start
+        console.print(
+            f"\n[bold green]✓ Direct BigQuery stream complete![/bold green] "
+            f"{len(loaded_tables)} tables, {self._stream_rows:,} rows in {elapsed:.1f}s"
+        )
+        return ExportResult(
+            target="bigquery",
+            tables_exported=loaded_tables,
+            total_rows=self._stream_rows,
+            views_created=created_views,
+            duration_seconds=round(elapsed, 2),
+            destination=f"{self.project}.{self.dataset}",
+            metadata={"location": self.location, "streamed": True},
         )

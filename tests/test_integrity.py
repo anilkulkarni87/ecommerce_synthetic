@@ -120,3 +120,88 @@ def test_identity_noise_end_to_end(tmp_path: Path):
     assert set(gt["customer_id"].to_list()) == cust_ids
     for teid in gt["true_entity_id"].to_list():
         assert teid in cust_ids
+
+
+def test_chunked_parquet_persistence_and_duckdb(tmp_path: Path):
+    import json
+    import duckdb
+    from ecommerce_synth.exporters.base import ExportConfig
+    from ecommerce_synth.exporters.duckdb import DuckDBExporter
+    from ecommerce_synth.utils.writer import read_table_parquet
+
+    output_dir = tmp_path / "chunked_dataset"
+    # Small tier has 50,000 clickstream events -> with chunk_size=10000 it writes 5 chunks
+    config = load_config(tier_name="small", seed=55, output_dir=output_dir, chunk_size=10_000)
+    orchestrator = Orchestrator(config)
+    orchestrator.run()
+
+    chunk_dir = output_dir / "clickstream"
+    assert chunk_dir.is_dir()
+    parts = sorted(chunk_dir.glob("part-*.parquet"))
+    assert len(parts) == 5
+
+    with open(output_dir / "_manifest.json") as f:
+        manifest = json.load(f)
+    assert manifest["chunk_counts"]["clickstream"] == 5
+    assert manifest["row_counts"]["clickstream"] == 50_000
+
+    df_full = read_table_parquet(output_dir, "clickstream")
+    assert df_full is not None and df_full.height == 50_000
+
+    # Verify DuckDB exporter ingests chunked directory cleanly
+    db_file = tmp_path / "chunked.duckdb"
+    exp = DuckDBExporter(ExportConfig(target="duckdb", data_dir=output_dir, database=str(db_file), create_views=False))
+    exp.export()
+    conn = duckdb.connect(str(db_file))
+    assert conn.execute("SELECT COUNT(*) FROM clickstream").fetchone()[0] == 50_000
+    conn.close()
+
+
+def test_global_regions_and_compliance(tmp_path: Path):
+    output_dir = tmp_path / "global_dataset"
+    config = load_config(
+        tier_name="small",
+        seed=88,
+        output_dir=output_dir,
+        regions="US,GB,DE,JP",
+        compliance_mode=True,
+    )
+    orchestrator = Orchestrator(config)
+    orchestrator.run(only=["customers"])
+
+    addresses = pl.read_parquet(output_dir / "addresses.parquet")
+    countries = set(addresses["country"].to_list())
+    assert len(countries) > 1
+    assert countries.issubset({"US", "GB", "DE", "JP"})
+
+    consents_path = output_dir / "customer_consents.parquet"
+    assert consents_path.exists()
+    consents = pl.read_parquet(consents_path)
+    assert consents.height > 0
+    assert set(consents["jurisdiction"].to_list()).issubset({"CCPA", "UK_GDPR", "GDPR", "APPI"})
+
+
+def test_direct_stream_to_duckdb_no_local_files(tmp_path: Path):
+    import duckdb
+    from ecommerce_synth.exporters.base import ExportConfig
+    from ecommerce_synth.exporters.duckdb import DuckDBExporter
+
+    local_out = tmp_path / "should_stay_empty"
+    db_file = tmp_path / "streamed_live.duckdb"
+
+    config = load_config(tier_name="small", seed=12, output_dir=local_out, chunk_size=10_000)
+    stream_exp = DuckDBExporter(
+        ExportConfig(target="duckdb", data_dir=None, database=str(db_file), schema_name="live_ecom")
+    )
+    orchestrator = Orchestrator(config, stream_exporter=stream_exp)
+    orchestrator.run()
+
+    # Zero local Parquet files should have been created
+    assert not local_out.exists()
+    assert db_file.exists()
+
+    conn = duckdb.connect(str(db_file))
+    assert conn.execute("SELECT COUNT(*) FROM live_ecom.clickstream").fetchone()[0] == 50_000
+    assert conn.execute("SELECT COUNT(*) FROM live_ecom.customers").fetchone()[0] == 500
+    assert conn.execute("SELECT COUNT(*) FROM live_ecom.v_omnichannel_sales").fetchone()[0] > 0
+    conn.close()

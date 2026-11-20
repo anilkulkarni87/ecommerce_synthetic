@@ -113,3 +113,11 @@ def test_view_generator_all_dialects() -> None:
     assert "`proj.ds.orders_online`" in views_bq[0][1]
     assert "`proj.ds.v_omnichannel_sales`" in views_bq[1][1]
 
+
+def test_column_governance_tags_sql(ddl_gen: DDLGenerator) -> None:
+    db_tags = ddl_gen.generate_column_tags_sql("customers", "databricks", "cat", "sch")
+    assert any("ALTER COLUMN email SET TAGS ('pii_classification' = 'DIRECT_PII', 'sensitivity' = 'HIGH')" in s for s in db_tags)
+
+    sf_tags = ddl_gen.generate_column_tags_sql("customers", "snowflake", "DB", "SCH")
+    assert any("MODIFY COLUMN email SET TAG pii_classification = 'DIRECT_PII', sensitivity = 'HIGH'" in s for s in sf_tags)
+

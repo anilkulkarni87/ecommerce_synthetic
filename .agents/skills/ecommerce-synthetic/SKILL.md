@@ -36,6 +36,24 @@ source .venv/bin/activate
 ecommerce-synth generate --tier small --duckdb --output ./output/test_run
 ```
 
+### 1b. Large-Scale Chunked Persistence, Global Regions, Identity Noise & Direct DB Streaming
+```bash
+# Stream 50M+ rows in bounded-RAM Parquet chunks (creates table/part-00000.parquet, ...)
+ecommerce-synth generate --tier large --chunk-size 500000 --output ./output/large_run
+
+# Stream directly to DuckDB, Snowflake, Databricks, or BigQuery WITHOUT saving local Parquet files
+ecommerce-synth generate --tier medium --stream-to duckdb --database ./live.duckdb --schema ecommerce
+ecommerce-synth generate --tier large --stream-to snowflake --database ECOM_DB --schema PROD
+ecommerce-synth generate --tier large --stream-to databricks --catalog dev_catalog --schema ecommerce
+ecommerce-synth generate --tier large --stream-to bigquery --project my-gcp-project --dataset ecommerce
+
+# Entity Resolution messy-data mode (injects duplicate customer profiles + identity_ground_truth.parquet)
+ecommerce-synth generate --tier small --identity-noise 0.15 --output ./output/er_bench
+
+# Global multi-region localization + GDPR/CCPA consent ledger (customer_consents.parquet)
+ecommerce-synth generate --tier small --regions US,GB,DE,JP --compliance --output ./output/global_run
+```
+
 ### 2. Available Volume Tiers
 - `--tier small` (~68K total rows, ~4.5 MB, ~5 seconds)
 - `--tier medium` (~6M total rows, ~400 MB, ~45 seconds)

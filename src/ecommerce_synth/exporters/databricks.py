@@ -97,19 +97,23 @@ class DatabricksExporter(BaseExporter):
 
         console.print(f"\n📦 [bold cyan]Staging files to UC Volume:[/bold cyan] /Volumes/{self.catalog}/{self.schema_name}/{self.volume_name}/")
 
-        for pf in self.config.parquet_files:
-            volume_file_path = f"/Volumes/{self.catalog}/{self.schema_name}/{self.volume_name}/{pf.name}"
-            local_path = str(pf.resolve())
+        for table_name, part_paths in self.config.table_sources.items():
+            is_chunked = len(part_paths) > 1
+            for pf in part_paths:
+                rel = f"{table_name}/{pf.name}" if is_chunked else pf.name
+                volume_file_path = f"/Volumes/{self.catalog}/{self.schema_name}/{self.volume_name}/{rel}"
+                local_path = str(pf.resolve())
 
-            # Use upload_from for direct file upload with multipart & presigned URL support
-            if hasattr(w.files, "upload_from"):
-                w.files.upload_from(volume_file_path, local_path, overwrite=True)
-            else:
-                with open(pf, "rb") as f:
-                    w.files.upload(volume_file_path, f, overwrite=True)
+                # Use upload_from for direct file upload with multipart & presigned URL support
+                if hasattr(w.files, "upload_from"):
+                    w.files.upload_from(volume_file_path, local_path, overwrite=True)
+                else:
+                    with open(pf, "rb") as f:
+                        w.files.upload(volume_file_path, f, overwrite=True)
 
-            staged_paths.append(volume_file_path)
-            console.print(f"  ✓ Staged [green]{pf.name}[/green]")
+                staged_paths.append(volume_file_path)
+            label = f"{table_name}/ ({len(part_paths)} chunks)" if is_chunked else f"{table_name}.parquet"
+            console.print(f"  ✓ Staged [green]{label}[/green]")
 
         return staged_paths
 
@@ -119,15 +123,23 @@ class DatabricksExporter(BaseExporter):
 
         console.print(f"\n🧱 [bold cyan]Creating Delta tables in:[/bold cyan] {self.catalog}.{self.schema_name}")
 
-        for pf in self.config.parquet_files:
-            table_name = pf.stem
+        for table_name, part_paths in self.config.table_sources.items():
+            is_chunked = len(part_paths) > 1
             # 1. Delta CTAS from UC Volume
-            ctas_sql = self.ddl_gen.generate_databricks_ctas_sql(
-                table_name=table_name,
-                catalog=self.catalog,  # type: ignore[arg-type]
-                schema=self.schema_name,  # type: ignore[arg-type]
-                volume=self.volume_name,
-            )
+            if is_chunked:
+                qual = f"{self.catalog}.{self.schema_name}.{table_name}"
+                vol_dir = f"/Volumes/{self.catalog}/{self.schema_name}/{self.volume_name}/{table_name}/"
+                ctas_sql = (
+                    f"CREATE OR REPLACE TABLE {qual} AS\n"
+                    f"SELECT * FROM read_files('{vol_dir}', format => 'parquet');"
+                )
+            else:
+                ctas_sql = self.ddl_gen.generate_databricks_ctas_sql(
+                    table_name=table_name,
+                    catalog=self.catalog,  # type: ignore[arg-type]
+                    schema=self.schema_name,  # type: ignore[arg-type]
+                    volume=self.volume_name,
+                )
             self._execute_sql(ctas_sql)
 
             # 2. Add Primary Key constraint
@@ -158,9 +170,20 @@ class DatabricksExporter(BaseExporter):
             loaded_tables.append(table_name)
             console.print(f"  ✓ Loaded table [green]{self.catalog}.{self.schema_name}.{table_name}[/green]")
 
+            # 3b. Apply Unity Catalog PII / sensitivity column tags
+            for tag_sql in self.ddl_gen.generate_column_tags_sql(
+                table_name=table_name,
+                dialect="databricks",
+                catalog_or_project=self.catalog,  # type: ignore[arg-type]
+                schema_or_dataset=self.schema_name,  # type: ignore[arg-type]
+            ):
+                try:
+                    self._execute_sql(tag_sql)
+                except Exception:
+                    pass
+
         # 4. Add Foreign Key constraints across tables
-        for pf in self.config.parquet_files:
-            table_name = pf.stem
+        for table_name in self.config.table_sources.keys():
             fk_sqls = self.ddl_gen.generate_foreign_keys_sql(
                 table_name=table_name,
                 dialect="databricks",
@@ -266,5 +289,76 @@ class DatabricksExporter(BaseExporter):
             duration_seconds=round(elapsed, 2),
             destination=f"{self.catalog}.{self.schema_name}",
             metadata={"volume": self.volume_name, "warehouse_id": self.warehouse_id},
+        )
+
+    def setup_stream(self) -> None:
+        """Initialize Unity Catalog catalog, schema, and volume for direct in-memory streaming."""
+        self.validate_prerequisites()
+        self._stream_start = time.time()
+        self._stream_rows = 0
+        try:
+            self._execute_sql(f"CREATE CATALOG IF NOT EXISTS {self.catalog};")
+        except Exception:
+            pass
+        self._execute_sql(f"CREATE SCHEMA IF NOT EXISTS {self.catalog}.{self.schema_name};")
+        self._execute_sql(f"CREATE VOLUME IF NOT EXISTS {self.catalog}.{self.schema_name}.{self.volume_name};")
+        console.print(f"\n🧱 [bold cyan]Streaming directly to Databricks UC:[/bold cyan] {self.catalog}.{self.schema_name}")
+
+    def ingest_chunk(self, table_name: str, df: Any, chunk_idx: int) -> None:
+        """Serialize chunk to an in-memory Parquet buffer and stream to UC Volume."""
+        if df is None or df.height == 0:
+            return
+        import io
+
+        w = self._get_client()
+        buf = io.BytesIO()
+        df.write_parquet(buf, compression="snappy")
+        buf.seek(0)
+        volume_path = f"/Volumes/{self.catalog}/{self.schema_name}/{self.volume_name}/{table_name}/part-{chunk_idx:05d}.parquet"
+        w.files.upload(volume_path, buf, overwrite=True)
+        self._stream_rows += df.height
+
+    def finalize_stream(self, loaded_tables: list[str]) -> ExportResult:
+        """Create Delta tables from streamed UC Volume chunks, apply constraints & views."""
+        for table_name in loaded_tables:
+            qual = f"{self.catalog}.{self.schema_name}.{table_name}"
+            vol_dir = f"/Volumes/{self.catalog}/{self.schema_name}/{self.volume_name}/{table_name}/"
+            self._execute_sql(
+                f"CREATE OR REPLACE TABLE {qual} AS SELECT * FROM read_files('{vol_dir}', format => 'parquet');"
+            )
+            table_meta = self.ddl_gen.tables.get(table_name, {})
+            pk_col = table_meta.get("primary_key")
+            if pk_col:
+                try:
+                    self._execute_sql(f"ALTER TABLE {qual} ADD CONSTRAINT {table_name}_pk PRIMARY KEY ({pk_col});")
+                except Exception:
+                    pass
+        for table_name in loaded_tables:
+            if table_name in self.ddl_gen.tables:
+                for fk_sql in self.ddl_gen.generate_foreign_keys_sql(
+                    table_name=table_name,
+                    dialect="databricks",
+                    catalog_or_project=self.catalog,  # type: ignore[arg-type]
+                    schema_or_dataset=self.schema_name,  # type: ignore[arg-type]
+                ):
+                    try:
+                        self._execute_sql(fk_sql)
+                    except Exception:
+                        pass
+
+        created_views = self.create_views()
+        elapsed = time.time() - self._stream_start
+        console.print(
+            f"\n[bold green]✓ Direct Databricks UC stream complete![/bold green] "
+            f"{len(loaded_tables)} tables, {self._stream_rows:,} rows in {elapsed:.1f}s"
+        )
+        return ExportResult(
+            target="databricks",
+            tables_exported=loaded_tables,
+            total_rows=self._stream_rows,
+            views_created=created_views,
+            duration_seconds=round(elapsed, 2),
+            destination=f"{self.catalog}.{self.schema_name}",
+            metadata={"volume": self.volume_name, "warehouse_id": self.warehouse_id, "streamed": True},
         )
 
