@@ -1,0 +1,8 @@
+profile_name: LGPD
+jurisdiction: BR
+consent_required: false
+retention_days: 730
+deletion_supported: true
+data_subject_request_types: [access, deletion, correction, portability, anonymization]
+marketing_purposes: [necessary, analytics, marketing]
+transfer_restrictions: [adequacy_or_equivalent_safeguards_required]

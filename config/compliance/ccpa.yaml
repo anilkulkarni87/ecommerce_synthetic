@@ -1,0 +1,8 @@
+profile_name: CCPA/CPRA
+jurisdiction: US-CA
+consent_required: false
+retention_days: 730
+deletion_supported: true
+data_subject_request_types: [access, deletion, correction, opt_out_sale, opt_out_sharing]
+marketing_purposes: [personalization, analytics, advertising]
+transfer_restrictions: [service_provider_contract_required]

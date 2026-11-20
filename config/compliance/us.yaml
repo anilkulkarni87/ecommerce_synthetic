@@ -1,0 +1,8 @@
+profile_name: US
+jurisdiction: US
+consent_required: false
+retention_days: 2555
+deletion_supported: true
+data_subject_request_types: [access, deletion, correction, opt_out]
+marketing_purposes: [personalization, analytics, marketing]
+transfer_restrictions: []

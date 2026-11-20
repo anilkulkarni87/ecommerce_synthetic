@@ -1,0 +1,24 @@
+name: US
+country_code: US
+currency_code: USD
+currency_minor_unit: 2
+locale: en-US
+timezone: America/New_York
+phone_country_code: "+1"
+postal_code_label: ZIP code
+administrative_area_label: State
+tax_type: sales_tax
+administrative_areas:
+  - {code: CA, name: California, city: Los Angeles, postal_prefix: "90001"}
+  - {code: NY, name: New York, city: New York, postal_prefix: "10001"}
+  - {code: TX, name: Texas, city: Austin, postal_prefix: "73301"}
+  - {code: FL, name: Florida, city: Miami, postal_prefix: "33101"}
+  - {code: IL, name: Illinois, city: Chicago, postal_prefix: "60601"}
+tax_rates:
+  default: 0.07
+  CA: 0.0725
+  NY: 0.08
+  TX: 0.0625
+  FL: 0.06
+  IL: 0.0625
+payment_methods: [credit_card, debit_card, paypal, apple_pay, gift_card, ach]

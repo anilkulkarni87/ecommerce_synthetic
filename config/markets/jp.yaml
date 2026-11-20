@@ -1,0 +1,18 @@
+name: Japan
+country_code: JP
+currency_code: JPY
+currency_minor_unit: 0
+locale: ja-JP
+timezone: Asia/Tokyo
+phone_country_code: "+81"
+postal_code_label: Postal code
+administrative_area_label: Prefecture
+tax_type: consumption_tax
+administrative_areas:
+  - {code: TK, name: Tokyo, city: Tokyo, postal_prefix: "100-0001"}
+  - {code: OS, name: Osaka, city: Osaka, postal_prefix: "530-0001"}
+  - {code: HY, name: Hokkaido, city: Sapporo, postal_prefix: "060-0001"}
+  - {code: FK, name: Fukuoka, city: Fukuoka, postal_prefix: "810-0001"}
+tax_rates:
+  default: 0.10
+payment_methods: [credit_card, debit_card, konbini, bank_transfer, mobile_pay, gift_card]

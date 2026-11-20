@@ -1,0 +1,18 @@
+name: United Kingdom
+country_code: GB
+currency_code: GBP
+currency_minor_unit: 2
+locale: en-GB
+timezone: Europe/London
+phone_country_code: "+44"
+postal_code_label: Postcode
+administrative_area_label: Region
+tax_type: VAT
+administrative_areas:
+  - {code: ENG, name: England, city: London, postal_prefix: "SW1A 1AA"}
+  - {code: SCT, name: Scotland, city: Edinburgh, postal_prefix: "EH1 1YZ"}
+  - {code: WAL, name: Wales, city: Cardiff, postal_prefix: "CF10 1EP"}
+  - {code: NIR, name: Northern Ireland, city: Belfast, postal_prefix: "BT1 1AA"}
+tax_rates:
+  default: 0.20
+payment_methods: [credit_card, debit_card, paypal, apple_pay, bank_transfer, gift_card]

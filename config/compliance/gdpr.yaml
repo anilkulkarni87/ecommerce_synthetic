@@ -1,0 +1,8 @@
+profile_name: GDPR
+jurisdiction: EU
+consent_required: true
+retention_days: 365
+deletion_supported: true
+data_subject_request_types: [access, rectification, erasure, restriction, portability, objection]
+marketing_purposes: [necessary, personalization, analytics, marketing]
+transfer_restrictions: [adequacy_or_safeguards_required]

@@ -1,0 +1,18 @@
+name: Australia
+country_code: AU
+currency_code: AUD
+currency_minor_unit: 2
+locale: en-AU
+timezone: Australia/Sydney
+phone_country_code: "+61"
+postal_code_label: Postcode
+administrative_area_label: State
+tax_type: GST
+administrative_areas:
+  - {code: NSW, name: New South Wales, city: Sydney, postal_prefix: "2000"}
+  - {code: VIC, name: Victoria, city: Melbourne, postal_prefix: "3000"}
+  - {code: QLD, name: Queensland, city: Brisbane, postal_prefix: "4000"}
+  - {code: WA, name: Western Australia, city: Perth, postal_prefix: "6000"}
+tax_rates:
+  default: 0.10
+payment_methods: [credit_card, debit_card, paypal, apple_pay, bank_transfer, gift_card]
