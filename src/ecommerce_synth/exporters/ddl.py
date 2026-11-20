@@ -29,6 +29,8 @@ class DDLGenerator:
             self.schema_data: dict[str, Any] = json.load(f)
         
         self.tables: dict[str, Any] = self.schema_data.get("tables", {})
+        self.optional_tables: dict[str, Any] = self.schema_data.get("optional_tables", {})
+        self.all_tables: dict[str, Any] = {**self.tables, **self.optional_tables}
 
     def get_column_type(self, raw_type: str, dialect: str) -> str:
         """Map logical schema type to target warehouse SQL type."""
@@ -77,7 +79,7 @@ class DDLGenerator:
         replace: bool = False,
     ) -> str:
         """Generate CREATE TABLE DDL with columns, types, nullability, and primary key."""
-        table_meta = self.tables.get(table_name)
+        table_meta = self.all_tables.get(table_name)
         if not table_meta:
             raise KeyError(f"Table '{table_name}' not defined in schema.json")
 
@@ -214,7 +216,7 @@ class DDLGenerator:
         schema_or_dataset: str,
     ) -> list[str]:
         """Generate ALTER TABLE governance tag statements for PII/financial columns."""
-        table_meta = self.tables.get(table_name)
+        table_meta = self.all_tables.get(table_name)
         if not table_meta:
             return []
 

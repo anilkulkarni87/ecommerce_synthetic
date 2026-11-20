@@ -1177,5 +1177,80 @@
         }
       }
     }
+  },
+  "optional_tables": {
+    "customer_consents": {
+      "file": "customer_consents.parquet",
+      "optional_flag": "--compliance",
+      "description": "GDPR, UK_GDPR, CCPA, APPI, and LGPD privacy consent ledger per customer and purpose (generated when --compliance is enabled).",
+      "primary_key": "consent_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id"
+      },
+      "columns": {
+        "consent_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Consent record primary key"
+        },
+        "customer_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "FK to customers"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "nullable": false,
+          "description": "Regulatory framework (GDPR, UK_GDPR, CCPA, APPI, LGPD, PIPEDA, APP)"
+        },
+        "purpose": {
+          "type": "string",
+          "nullable": false,
+          "description": "Consent purpose (marketing_email, analytics_cookies, personalization)"
+        },
+        "status": {
+          "type": "string",
+          "nullable": false,
+          "description": "granted or withdrawn"
+        },
+        "updated_at": {
+          "type": "timestamp",
+          "nullable": false,
+          "description": "Timestamp of consent state"
+        }
+      }
+    },
+    "identity_ground_truth": {
+      "file": "identity_ground_truth.parquet",
+      "optional_flag": "--identity-noise",
+      "description": "Canonical entity-resolution ground truth mapping fragmented duplicate customer profiles back to their true_entity_id (generated when --identity-noise > 0).",
+      "primary_key": "customer_id",
+      "foreign_keys": {
+        "customer_id": "customers.customer_id",
+        "true_entity_id": "customers.customer_id"
+      },
+      "columns": {
+        "customer_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "FK to customers (primary key)"
+        },
+        "true_entity_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Canonical real-world person customer_id"
+        },
+        "is_duplicate": {
+          "type": "boolean",
+          "nullable": false,
+          "description": "True if this row is an injected duplicate profile"
+        },
+        "noise_type": {
+          "type": "string",
+          "nullable": false,
+          "description": "Mutation type: none, email_alias, phone_format, nickname_typo, household_split"
+        }
+      }
+    }
   }
 }
