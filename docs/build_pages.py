@@ -116,6 +116,9 @@ html_template = '''<!DOCTYPE html>
     .tabular-nums {
       font-variant-numeric: tabular-nums;
     }
+    h1 { font-size: 2.75rem; line-height: 1.12; }
+    h2 { font-size: 1.875rem; line-height: 1.2; }
+    h3 { font-size: 1.05rem; line-height: 1.4; }
   </style>
 </head>
 <body class="bg-canvas text-slate-100 font-sans antialiased">
@@ -457,8 +460,8 @@ html_template = '''<!DOCTYPE html>
             </div>
           </div>
 
-          <div class="mt-6">
-            <div class="bg-canvas border border-borderline rounded-lg p-3 font-mono text-xs text-indigo-300 overflow-x-auto whitespace-nowrap mb-3" id="generated-command-display">ecommerce-synth generate --tier medium --chunk-size 500000</div>
+          <div class="mt-6 pt-5 border-t border-borderline">
+            <div class="bg-canvas/90 p-3 rounded font-mono text-xs text-indigo-300 overflow-x-auto whitespace-nowrap mb-3" id="generated-command-display">ecommerce-synth generate --tier medium --chunk-size 500000</div>
             <button onclick="copyGeneratedCommand()" class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition">
               Copy Command
             </button>
@@ -610,7 +613,7 @@ html_template = '''<!DOCTYPE html>
               <h3 class="text-base font-semibold text-slate-100">Databricks Unity Catalog</h3>
               <p>Stages single or chunked Parquet directories to UC Volumes (or streams in-memory Parquet buffers), executes <code class="font-mono text-slate-300">read_files()</code> Delta CTAS, and applies UC column governance tags.</p>
             </div>
-            <div class="lg:col-span-8 bg-canvas border border-borderline rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto">
+            <div class="lg:col-span-8 bg-canvas/90 p-5 font-mono text-xs text-slate-300 overflow-x-auto">
               <div class="text-slate-500 mb-1"># Direct stream or export</div>
               <div class="text-indigo-300 mb-3">$ ecommerce-synth generate --tier large --stream-to databricks --catalog dev --schema ecom</div>
               <div class="text-slate-500 mb-1">-- Governance tags applied automatically</div>
@@ -623,7 +626,7 @@ html_template = '''<!DOCTYPE html>
               <h3 class="text-base font-semibold text-slate-100">Snowflake</h3>
               <p>Supports both internal stage <code class="font-mono text-slate-300">PUT</code> + <code class="font-mono text-slate-300">COPY INTO</code> and zero-file <code class="font-mono text-slate-300">write_pandas</code> streaming, with auto-discovered <code class="font-mono text-slate-300">connections.toml</code> profiles, 4h MFA token caching, and <code class="font-mono text-slate-300">MODIFY COLUMN ... SET TAG</code>.</p>
             </div>
-            <div class="lg:col-span-8 bg-canvas border border-borderline rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto">
+            <div class="lg:col-span-8 bg-canvas/90 p-5 font-mono text-xs text-slate-300 overflow-x-auto">
               <div class="text-slate-500 mb-1"># Direct stream without local Parquet</div>
               <div class="text-indigo-300 mb-3">$ ecommerce-synth generate --tier large --stream-to snowflake --database ECOM_DB --schema PROD</div>
               <div class="text-slate-500 mb-1">-- Governance tags applied automatically</div>
@@ -636,7 +639,7 @@ html_template = '''<!DOCTYPE html>
               <h3 class="text-base font-semibold text-slate-100">Google Cloud BigQuery</h3>
               <p>Streams DataFrames directly via <code class="font-mono text-slate-300">load_table_from_dataframe</code> or stages chunked Parquet files to GCS with native <code class="font-mono text-slate-300">LoadJob</code> ingestion and un-enforced PK/FK constraints.</p>
             </div>
-            <div class="lg:col-span-8 bg-canvas border border-borderline rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto">
+            <div class="lg:col-span-8 bg-canvas/90 p-5 font-mono text-xs text-slate-300 overflow-x-auto">
               <div class="text-slate-500 mb-1"># Direct stream to BigQuery</div>
               <div class="text-indigo-300 mb-3">$ ecommerce-synth generate --tier medium --stream-to bigquery --project my-gcp-project --dataset ecom</div>
               <div class="text-slate-500 mb-1">-- Analytical view deployed</div>
@@ -649,7 +652,7 @@ html_template = '''<!DOCTYPE html>
               <h3 class="text-base font-semibold text-slate-100">DuckDB</h3>
               <p>Zero-copy Polars registration via <code class="font-mono text-slate-300">--stream-to duckdb</code> or multi-part <code class="font-mono text-slate-300">read_parquet([...])</code> export with custom <code class="font-mono text-slate-300">--schema</code> support.</p>
             </div>
-            <div class="lg:col-span-8 bg-canvas border border-borderline rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto">
+            <div class="lg:col-span-8 bg-canvas/90 p-5 font-mono text-xs text-slate-300 overflow-x-auto">
               <div class="text-slate-500 mb-1"># Stream directly into a custom schema</div>
               <div class="text-indigo-300 mb-3">$ ecommerce-synth generate --tier medium --stream-to duckdb --database ./live.duckdb --schema retail</div>
               <div class="text-slate-500 mb-1">-- Query immediately</div>
@@ -780,11 +783,11 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="bg-surface border border-borderline rounded-xl p-6 space-y-3 font-mono text-xs text-slate-300">
           <div class="text-xs font-sans font-semibold text-slate-100 mb-2">Installation</div>
-          <div class="bg-canvas p-3 rounded-lg border border-borderline flex items-center justify-between gap-2">
+          <div class="bg-canvas/90 p-3 flex items-center justify-between gap-2">
             <span>pip install -e ".[dev]"</span>
             <button onclick="copyCommand('pip install -e &quot;.[dev]&quot;')" class="text-slate-400 hover:text-white shrink-0">Copy</button>
           </div>
-          <div class="bg-canvas p-3 rounded-lg border border-borderline flex items-center justify-between gap-2">
+          <div class="bg-canvas/90 p-3 flex items-center justify-between gap-2">
             <span>pip install -e ".[all-targets]"</span>
             <button onclick="copyCommand('pip install -e &quot;.[all-targets]&quot;')" class="text-slate-400 hover:text-white shrink-0">Copy</button>
           </div>
@@ -792,11 +795,11 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
 
         <div class="bg-surface border border-borderline rounded-xl p-6 space-y-3 font-mono text-xs text-slate-300">
           <div class="text-xs font-sans font-semibold text-slate-100 mb-2">Common Workflows</div>
-          <div class="bg-canvas p-3 rounded-lg border border-borderline">
+          <div class="bg-canvas/90 p-3">
             <span class="text-slate-500 block mb-0.5"># Stream 50M+ scale directly to Snowflake (no local Parquet)</span>
             <span class="text-indigo-300">ecommerce-synth generate --tier large --stream-to snowflake --database ECOM_DB --schema PROD</span>
           </div>
-          <div class="bg-canvas p-3 rounded-lg border border-borderline">
+          <div class="bg-canvas/90 p-3">
             <span class="text-slate-500 block mb-0.5"># Global regions + GDPR consent + 15% entity-resolution noise</span>
             <span class="text-emerald-300">ecommerce-synth generate --tier medium --regions US,GB,DE,JP --compliance --identity-noise 0.15</span>
           </div>
