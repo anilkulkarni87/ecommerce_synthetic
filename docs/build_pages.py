@@ -17,6 +17,9 @@ DOMAINS = {
     "order_items_instore": "Omnichannel Sales & POS",
     "stores": "Omnichannel Sales & POS",
     "products": "Omnichannel Sales & POS",
+    "shipments": "Omnichannel Sales & POS",
+    "returns": "Omnichannel Sales & POS",
+    "inventory_snapshots": "Omnichannel Sales & POS",
     "customers": "Customer 360 & Identity",
     "addresses": "Customer 360 & Identity",
     "instore_accounts": "Customer 360 & Identity",
@@ -85,6 +88,9 @@ html_template = '''<!DOCTYPE html>
   </script>
 
   <style>
+    :root {
+      color-scheme: dark;
+    }
     ::selection {
       background: #6366F1;
       color: #FFFFFF;
@@ -128,8 +134,9 @@ html_template = '''<!DOCTYPE html>
       <nav class="hidden md:flex items-center gap-6 text-xs font-medium text-slate-400">
         <a href="#features" class="hover:text-slate-100 transition">Capabilities</a>
         <a href="#tiers" class="hover:text-slate-100 transition">Scale &amp; CLI</a>
-        <a href="#schema" class="hover:text-slate-100 transition">Schema (21)</a>
+        <a href="#schema" class="hover:text-slate-100 transition">Schema (24)</a>
         <a href="#warehouses" class="hover:text-slate-100 transition">Warehouses</a>
+        <a href="#recipes" class="hover:text-slate-100 transition">SQL Recipes</a>
         <a href="#personas" class="hover:text-slate-100 transition">Personas</a>
         <a href="#quickstart" class="hover:text-slate-100 transition">Quickstart</a>
       </nav>
@@ -168,7 +175,7 @@ html_template = '''<!DOCTYPE html>
           <dl class="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-6 border-t border-borderline">
             <div>
               <dt class="text-xs text-slate-400">Schema</dt>
-              <dd class="text-lg font-semibold text-slate-100 tabular-nums mt-0.5">19 + 2 Tables</dd>
+              <dd class="text-lg font-semibold text-slate-100 tabular-nums mt-0.5">22 + 2 Tables</dd>
             </div>
             <div>
               <dt class="text-xs text-slate-400">Integrity</dt>
@@ -392,15 +399,20 @@ html_template = '''<!DOCTYPE html>
           <div class="space-y-4">
             <h3 class="text-sm font-semibold text-slate-100">Compose Generation Command</h3>
 
-            <div>
-              <label for="cmd-mode-select" class="block text-xs text-slate-400 mb-1.5">Persistence / Delivery Mode</label>
-              <select id="cmd-mode-select" onchange="updateGeneratedCommand()" class="w-full text-xs bg-canvas border border-borderline rounded-lg px-3 py-2 text-slate-200">
-                <option value="parquet">Local Parquet (Chunked if &gt; 500K rows)</option>
-                <option value="stream-duckdb">Direct Stream → DuckDB (0 local files)</option>
-                <option value="stream-snowflake">Direct Stream → Snowflake (0 local files)</option>
-                <option value="stream-databricks">Direct Stream → Databricks UC (0 local files)</option>
-                <option value="stream-bigquery">Direct Stream → BigQuery (0 local files)</option>
-              </select>
+            <div class="relative">
+              <label class="block text-xs text-slate-400 mb-1.5">Persistence / Delivery Mode</label>
+              <button type="button" id="cmd-mode-btn" onclick="toggleModeMenu()"
+                      class="w-full flex items-center justify-between text-xs bg-canvas border border-borderline hover:border-slate-600 rounded-lg px-3 py-2 text-slate-200 transition">
+                <span id="cmd-mode-label">Local Parquet (Chunked if &gt; 500K rows)</span>
+                <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+              </button>
+              <div id="cmd-mode-menu" class="hidden absolute z-30 mt-1.5 w-full bg-elevated border border-borderline rounded-lg shadow-xl shadow-black/60 py-1 text-xs">
+                <button type="button" onclick="selectCmdMode('parquet', 'Local Parquet (Chunked if > 500K rows)')" class="w-full text-left px-3 py-2 text-slate-200 hover:bg-indigo-600 hover:text-white transition">Local Parquet (Chunked if &gt; 500K rows)</button>
+                <button type="button" onclick="selectCmdMode('stream-duckdb', 'Direct Stream → DuckDB (0 local files)')" class="w-full text-left px-3 py-2 text-slate-200 hover:bg-indigo-600 hover:text-white transition">Direct Stream → DuckDB (0 local files)</button>
+                <button type="button" onclick="selectCmdMode('stream-snowflake', 'Direct Stream → Snowflake (0 local files)')" class="w-full text-left px-3 py-2 text-slate-200 hover:bg-indigo-600 hover:text-white transition">Direct Stream → Snowflake (0 local files)</button>
+                <button type="button" onclick="selectCmdMode('stream-databricks', 'Direct Stream → Databricks UC (0 local files)')" class="w-full text-left px-3 py-2 text-slate-200 hover:bg-indigo-600 hover:text-white transition">Direct Stream → Databricks UC (0 local files)</button>
+                <button type="button" onclick="selectCmdMode('stream-bigquery', 'Direct Stream → BigQuery (0 local files)')" class="w-full text-left px-3 py-2 text-slate-200 hover:bg-indigo-600 hover:text-white transition">Direct Stream → BigQuery (0 local files)</button>
+              </div>
             </div>
 
             <div class="space-y-2.5 pt-1">
@@ -420,9 +432,7 @@ html_template = '''<!DOCTYPE html>
           </div>
 
           <div class="mt-6">
-            <div class="bg-canvas border border-borderline rounded-lg p-3 font-mono text-xs text-indigo-300 break-all mb-3" id="generated-command-display">
-              ecommerce-synth generate --tier medium --chunk-size 500000
-            </div>
+            <div class="bg-canvas border border-borderline rounded-lg p-3 font-mono text-xs text-indigo-300 overflow-x-auto whitespace-nowrap mb-3" id="generated-command-display">ecommerce-synth generate --tier medium --chunk-size 500000</div>
             <button onclick="copyGeneratedCommand()" class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition">
               Copy Command
             </button>
@@ -432,27 +442,113 @@ html_template = '''<!DOCTYPE html>
     </div>
   </section>
 
-  <!-- Interactive 21-Table Schema & Data Dictionary (#schema) -->
+  <!-- Interactive 24-Table Schema, ERD & Data Dictionary (#schema) -->
   <section id="schema" class="py-20 border-b border-borderline bg-surface/40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
-          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-50 mb-2">Schema &amp; Data Dictionary (21 Tables)</h2>
+          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-50 mb-2">Schema, ERD &amp; Data Dictionary (24 Tables)</h2>
           <p class="text-sm text-slate-400 max-w-2xl">
-            19 core omnichannel tables plus 2 optional governance and entity-resolution tables (<code class="font-mono text-slate-300">customer_consents</code>, <code class="font-mono text-slate-300">identity_ground_truth</code>) defined in <code class="font-mono text-slate-300">config/schema.json</code>.
+            22 core omnichannel tables (including <code class="font-mono text-slate-300">shipments</code>, <code class="font-mono text-slate-300">returns</code>, <code class="font-mono text-slate-300">inventory_snapshots</code>) plus 2 optional governance/ER tables (<code class="font-mono text-slate-300">customer_consents</code>, <code class="font-mono text-slate-300">identity_ground_truth</code>).
           </p>
         </div>
 
-        <div class="w-full md:w-72">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="inline-flex p-1 rounded-lg bg-canvas border border-borderline text-xs font-mono">
+            <button type="button" onclick="selectDdlDialect('snowflake')" id="ddl-btn-snowflake" class="px-2.5 py-1 rounded bg-indigo-600 text-white transition">Snowflake</button>
+            <button type="button" onclick="selectDdlDialect('databricks')" id="ddl-btn-databricks" class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-100 transition">Databricks</button>
+            <button type="button" onclick="selectDdlDialect('bigquery')" id="ddl-btn-bigquery" class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-100 transition">BigQuery</button>
+          </div>
           <input type="text" id="schema-search" oninput="filterSchema()" placeholder="Filter tables or columns..."
-                 class="w-full bg-canvas border border-borderline rounded-lg px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500">
+                 class="w-full sm:w-64 bg-canvas border border-borderline rounded-lg px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500">
         </div>
+      </div>
+
+      <!-- Interactive Visual ERD -->
+      <div class="bg-canvas border border-borderline rounded-xl p-4 mb-8 overflow-x-auto">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-medium text-slate-400">Interactive Relationship Map — click any table node to filter</span>
+          <button onclick="filterByTable('')" class="text-[11px] font-mono text-indigo-400 hover:text-indigo-300">Reset selection</button>
+        </div>
+        <svg viewBox="0 0 960 230" class="w-full min-w-[720px] h-auto text-[11px] font-mono">
+          <!-- Connector lines -->
+          <g stroke="#2B364E" stroke-width="1.25" fill="none">
+            <path d="M165 115 L250 45"/>
+            <path d="M165 115 L250 95"/>
+            <path d="M165 115 L250 145"/>
+            <path d="M165 115 L250 195"/>
+            <path d="M390 45 L475 45"/>
+            <path d="M390 45 L475 95"/>
+            <path d="M390 95 L475 145"/>
+            <path d="M390 145 L475 195"/>
+            <path d="M615 45 L700 45"/>
+            <path d="M615 95 L700 95"/>
+            <path d="M615 145 L700 145"/>
+            <path d="M615 195 L700 195"/>
+          </g>
+          <!-- Hub: customers -->
+          <g onclick="filterByTable('customers')" class="cursor-pointer">
+            <rect x="20" y="95" width="145" height="40" rx="6" fill="#171E2E" stroke="#6366F1" stroke-width="1.5"/>
+            <text x="92" y="119" text-anchor="middle" fill="#F1F5F9" font-weight="600">customers</text>
+          </g>
+          <!-- Column 2 -->
+          <g onclick="filterByTable('orders_online')" class="cursor-pointer">
+            <rect x="250" y="25" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="320" y="47" text-anchor="middle" fill="#E2E8F0">orders_online</text>
+          </g>
+          <g onclick="filterByTable('orders_instore')" class="cursor-pointer">
+            <rect x="250" y="77" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="320" y="99" text-anchor="middle" fill="#E2E8F0">orders_instore</text>
+          </g>
+          <g onclick="filterByTable('customer_consents')" class="cursor-pointer">
+            <rect x="250" y="127" width="140" height="36" rx="6" fill="#111622" stroke="#334155" stroke-dasharray="3 2"/>
+            <text x="320" y="149" text-anchor="middle" fill="#FDA4AF">customer_consents</text>
+          </g>
+          <g onclick="filterByTable('identity_ground_truth')" class="cursor-pointer">
+            <rect x="250" y="177" width="140" height="36" rx="6" fill="#111622" stroke="#334155" stroke-dasharray="3 2"/>
+            <text x="320" y="199" text-anchor="middle" fill="#A5B4FC">identity_ground_truth</text>
+          </g>
+          <!-- Column 3 -->
+          <g onclick="filterByTable('shipments')" class="cursor-pointer">
+            <rect x="475" y="25" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="545" y="47" text-anchor="middle" fill="#E2E8F0">shipments</text>
+          </g>
+          <g onclick="filterByTable('returns')" class="cursor-pointer">
+            <rect x="475" y="77" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="545" y="99" text-anchor="middle" fill="#E2E8F0">returns</text>
+          </g>
+          <g onclick="filterByTable('clickstream')" class="cursor-pointer">
+            <rect x="475" y="127" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="545" y="149" text-anchor="middle" fill="#67E8F9">clickstream</text>
+          </g>
+          <g onclick="filterByTable('fraud_flags')" class="cursor-pointer">
+            <rect x="475" y="177" width="140" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="545" y="199" text-anchor="middle" fill="#FCA5A5">fraud_flags</text>
+          </g>
+          <!-- Column 4 -->
+          <g onclick="filterByTable('products')" class="cursor-pointer">
+            <rect x="700" y="25" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="775" y="47" text-anchor="middle" fill="#E2E8F0">products</text>
+          </g>
+          <g onclick="filterByTable('inventory_snapshots')" class="cursor-pointer">
+            <rect x="700" y="77" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="775" y="99" text-anchor="middle" fill="#E2E8F0">inventory_snapshots</text>
+          </g>
+          <g onclick="filterByTable('loyalty_members')" class="cursor-pointer">
+            <rect x="700" y="127" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="775" y="149" text-anchor="middle" fill="#E2E8F0">loyalty_members</text>
+          </g>
+          <g onclick="filterByTable('loyalty_transactions')" class="cursor-pointer">
+            <rect x="700" y="177" width="150" height="36" rx="6" fill="#111622" stroke="#1F293D"/>
+            <text x="775" y="199" text-anchor="middle" fill="#E2E8F0">loyalty_transactions</text>
+          </g>
+        </svg>
       </div>
 
       <!-- Domain Filter Pills -->
       <div class="flex flex-wrap gap-2 mb-8">
-        <button onclick="filterDomain('all')" id="domain-pill-all" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition">All (21)</button>
-        <button onclick="filterDomain('Omnichannel Sales & POS')" id="domain-pill-sales" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-surface text-slate-300 hover:text-white border border-borderline transition">Sales &amp; POS (6)</button>
+        <button onclick="filterDomain('all')" id="domain-pill-all" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition">All (24)</button>
+        <button onclick="filterDomain('Omnichannel Sales & POS')" id="domain-pill-sales" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-surface text-slate-300 hover:text-white border border-borderline transition">Sales, Fulfillment &amp; POS (9)</button>
         <button onclick="filterDomain('Customer 360 & Identity')" id="domain-pill-cust" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-surface text-slate-300 hover:text-white border border-borderline transition">Customer 360 (4)</button>
         <button onclick="filterDomain('Engagement & Retention')" id="domain-pill-eng" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-surface text-slate-300 hover:text-white border border-borderline transition">Engagement (6)</button>
         <button onclick="filterDomain('Experimentation & Fraud')" id="domain-pill-fraud" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-surface text-slate-300 hover:text-white border border-borderline transition">Experiments &amp; Fraud (3)</button>
@@ -533,6 +629,68 @@ html_template = '''<!DOCTYPE html>
               <div class="text-emerald-300">SELECT channel, COUNT(*) AS txns, SUM(total_amount) AS gmv FROM retail.v_omnichannel_sales GROUP BY 1;</div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SQL Recipe Showcase (#recipes) -->
+  <section id="recipes" class="py-20 border-b border-borderline bg-surface/40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-2xl mb-10">
+        <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-50 mb-2">SQL Recipes &amp; Benchmark Queries</h2>
+        <p class="text-sm text-slate-400">Ready-to-run analytical queries for entity resolution evaluation, GDPR consent auditing, funnel attribution, and multi-currency consolidation.</p>
+      </div>
+
+      <div class="bg-surface border border-borderline rounded-xl overflow-hidden">
+        <div class="grid grid-cols-2 sm:grid-cols-4 border-b border-borderline bg-elevated/60 text-xs font-medium">
+          <button onclick="switchRecipeTab('er')" id="rec-tab-er" class="py-3 px-4 border-b-2 border-indigo-500 text-white bg-surface transition">Entity Resolution</button>
+          <button onclick="switchRecipeTab('gdpr')" id="rec-tab-gdpr" class="py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">GDPR Consent Audit</button>
+          <button onclick="switchRecipeTab('funnel')" id="rec-tab-funnel" class="py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Funnel Attribution</button>
+          <button onclick="switchRecipeTab('fx')" id="rec-tab-fx" class="py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Multi-Currency GMV</button>
+        </div>
+        <div class="p-6 bg-canvas/80 font-mono text-xs text-slate-300 overflow-x-auto">
+          <pre id="rec-content-er" class="leading-relaxed">SELECT
+  gt.noise_type,
+  COUNT(*) AS duplicate_profiles,
+  COUNT(DISTINCT gt.true_entity_id) AS canonical_entities
+FROM identity_ground_truth gt
+JOIN customers c ON gt.customer_id = c.customer_id
+WHERE gt.is_duplicate = TRUE
+GROUP BY gt.noise_type
+ORDER BY duplicate_profiles DESC;</pre>
+
+          <pre id="rec-content-gdpr" class="hidden leading-relaxed">SELECT
+  cc.jurisdiction,
+  cc.purpose,
+  cc.status,
+  COUNT(*) AS customer_count
+FROM customer_consents cc
+JOIN customers c ON cc.customer_id = c.customer_id
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 4 DESC;</pre>
+
+          <pre id="rec-content-funnel" class="hidden leading-relaxed">SELECT
+  o.device_type,
+  COUNT(DISTINCT o.order_id) AS linked_orders,
+  ROUND(AVG(cs.session_events), 1) AS avg_events_before_purchase
+FROM orders_online o
+JOIN (
+  SELECT session_id, COUNT(*) AS session_events
+  FROM clickstream
+  GROUP BY session_id
+) cs ON o.session_id = cs.session_id
+GROUP BY o.device_type;</pre>
+
+          <pre id="rec-content-fx" class="hidden leading-relaxed">SELECT
+  currency_code,
+  tax_regime,
+  COUNT(*) AS order_count,
+  ROUND(SUM(total_amount), 2) AS local_gmv,
+  ROUND(SUM(total_amount_usd), 2) AS usd_consolidated_gmv
+FROM orders_online
+GROUP BY 1, 2
+ORDER BY usd_consolidated_gmv DESC;</pre>
         </div>
       </div>
     </div>
@@ -635,6 +793,36 @@ html_template = '''<!DOCTYPE html>
 
     let currentTier = "medium";
     let currentDomain = "all";
+    let currentCmdMode = "parquet";
+    let currentDdlDialect = "snowflake";
+
+    function toggleModeMenu() {
+      document.getElementById('cmd-mode-menu').classList.toggle('hidden');
+    }
+
+    function selectCmdMode(mode, label) {
+      currentCmdMode = mode;
+      document.getElementById('cmd-mode-label').textContent = label;
+      document.getElementById('cmd-mode-menu').classList.add('hidden');
+      updateGeneratedCommand();
+    }
+
+    function selectDdlDialect(dialect) {
+      currentDdlDialect = dialect;
+      ['snowflake', 'databricks', 'bigquery'].forEach(d => {
+        document.getElementById('ddl-btn-' + d).className = d === dialect
+          ? "px-2.5 py-1 rounded bg-indigo-600 text-white transition"
+          : "px-2.5 py-1 rounded text-slate-400 hover:text-slate-100 transition";
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      const btn = document.getElementById('cmd-mode-btn');
+      const menu = document.getElementById('cmd-mode-menu');
+      if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
 
     function selectTier(tierKey) {
       currentTier = tierKey;
@@ -657,7 +845,7 @@ html_template = '''<!DOCTYPE html>
     }
 
     function updateGeneratedCommand() {
-      const mode = document.getElementById('cmd-mode-select').value;
+      const mode = currentCmdMode;
       const useGlobal = document.getElementById('opt-global').checked;
       const useCompliance = document.getElementById('opt-compliance').checked;
       const useIdentity = document.getElementById('opt-identity').checked;
@@ -726,6 +914,99 @@ html_template = '''<!DOCTYPE html>
       if (t.includes('int') || t.includes('float')) return 'text-amber-300';
       if (t.includes('bool')) return 'text-emerald-300';
       return 'text-slate-300';
+    }
+
+    const SAMPLE_ROWS = {
+      customers: [
+        { customer_id: "c8a1f2...", first_name: "Elena", last_name: "Vance", email: "elena.vance42@gmail.com", country_hint: "DE", customer_segment: "vip" },
+        { customer_id: "REDACTED", first_name: "REDACTED", last_name: "REDACTED", email: "erased_9b12@anonymized.local", country_hint: "GB", customer_segment: "returning" }
+      ],
+      orders_online: [
+        { order_id: "ord_771a...", status: "delivered", total_amount: 149.99, currency_code: "EUR", fx_rate_to_usd: 1.08, total_amount_usd: 161.99, tax_regime: "VAT" },
+        { order_id: "ord_882b...", status: "returned", total_amount: 84.50, currency_code: "USD", fx_rate_to_usd: 1.0, total_amount_usd: 84.50, tax_regime: "SALES_TAX" }
+      ],
+      shipments: [
+        { shipment_id: "shp_01a...", order_id: "ord_771a...", carrier: "DHL", tracking_number: "DH4829103841", shipping_tier: "express", status: "delivered" }
+      ],
+      returns: [
+        { return_id: "ret_19c...", order_id: "ord_882b...", return_reason: "wrong_size", refund_amount: 84.50, restocked: true }
+      ],
+      customer_consents: [
+        { consent_id: "cns_11a...", jurisdiction: "GDPR", purpose: "analytics_cookies", status: "withdrawn" },
+        { consent_id: "cns_11b...", jurisdiction: "CCPA", purpose: "marketing_email", status: "granted" }
+      ],
+      identity_ground_truth: [
+        { customer_id: "c8a1f2...", true_entity_id: "c8a1f2...", is_duplicate: false, noise_type: "none" },
+        { customer_id: "d91e4a...", true_entity_id: "c8a1f2...", is_duplicate: true, noise_type: "email_alias" }
+      ],
+      fraud_flags: [
+        { flag_id: "flg_001...", entity_type: "order", fraud_type: "card_testing", risk_score: 0.94, is_confirmed_fraud: true }
+      ]
+    };
+
+    function switchRecipeTab(tabId) {
+      ['er', 'gdpr', 'funnel', 'fx'].forEach(t => {
+        const btn = document.getElementById('rec-tab-' + t);
+        const pre = document.getElementById('rec-content-' + t);
+        if (t === tabId) {
+          btn.className = "py-3 px-4 border-b-2 border-indigo-500 text-white bg-surface transition";
+          pre.classList.remove('hidden');
+        } else {
+          btn.className = "py-3 px-4 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition";
+          pre.classList.add('hidden');
+        }
+      });
+    }
+
+    function filterByTable(tableName) {
+      document.getElementById('schema-search').value = tableName;
+      if (tableName) {
+        currentDomain = 'all';
+        filterDomain('all');
+      } else {
+        renderSchemaCards();
+      }
+    }
+
+    function mapSqlType(rawType, dialect) {
+      const t = rawType.toLowerCase();
+      if (t.includes('string') || t.includes('uuid')) return dialect === 'snowflake' ? 'VARCHAR' : 'STRING';
+      if (t.includes('integer')) return dialect === 'bigquery' ? 'INT64' : 'INT';
+      if (t.includes('float')) return dialect === 'bigquery' ? 'FLOAT64' : (dialect === 'databricks' ? 'DOUBLE' : 'FLOAT');
+      if (t.includes('bool')) return dialect === 'bigquery' ? 'BOOL' : 'BOOLEAN';
+      if (t.includes('timestamp')) return dialect === 'snowflake' ? 'TIMESTAMP_NTZ' : 'TIMESTAMP';
+      if (t.includes('date')) return 'DATE';
+      return 'STRING';
+    }
+
+    function copyTableDDL(tableName) {
+      const tinfo = SCHEMA.tables[tableName];
+      const dialect = currentDdlDialect;
+      const cols = [];
+      const tagStmts = [];
+      for (const [cname, cinfo] of Object.entries(tinfo.columns)) {
+        const sqlType = mapSqlType(cinfo.type, dialect);
+        const nn = cinfo.nullable ? '' : ' NOT NULL';
+        cols.push(`  ${cname} ${sqlType}${nn}`);
+        if (cinfo.pii_classification) {
+          if (dialect === 'databricks') {
+            tagStmts.push(`ALTER TABLE catalog.schema.${tableName} ALTER COLUMN ${cname} SET TAGS ('pii_classification' = '${cinfo.pii_classification}', 'sensitivity' = '${cinfo.sensitivity}');`);
+          } else if (dialect === 'snowflake') {
+            tagStmts.push(`ALTER TABLE db.schema.${tableName} MODIFY COLUMN ${cname} SET TAG pii_classification = '${cinfo.pii_classification}', sensitivity = '${cinfo.sensitivity}';`);
+          }
+        }
+      }
+      if (tinfo.primary_key && dialect !== 'bigquery') {
+        cols.push(`  CONSTRAINT ${tableName}_pk PRIMARY KEY (${tinfo.primary_key})`);
+      }
+      let ddl = `CREATE OR REPLACE TABLE ${tableName} (\\n${cols.join(',\\n')}\\n);`;
+      if (tagStmts.length > 0) ddl += `\\n\\n${tagStmts.join('\\n')}`;
+      copyCommand(ddl);
+    }
+
+    function toggleSampleData(tableName) {
+      const el = document.getElementById('sample-container-' + tableName);
+      if (el) el.classList.toggle('hidden');
     }
 
     function renderSchemaCards() {
@@ -806,10 +1087,21 @@ html_template = '''<!DOCTYPE html>
                 <tbody>${columnsHtml}</tbody>
               </table>
             </div>
-            <button onclick="toggleTableDetails('${tname}')" id="toggle-btn-${tname}"
-                    class="w-full mt-2 py-1.5 rounded-lg bg-elevated hover:bg-canvas text-slate-300 hover:text-white text-xs font-medium border border-borderline transition">
-              View ${colCount} Columns
-            </button>
+            <div id="sample-container-${tname}" class="hidden mt-3 pt-3 border-t border-borderline overflow-x-auto">
+              <pre class="text-[10px] font-mono text-emerald-300 bg-canvas p-2.5 rounded-lg border border-borderline leading-relaxed">${SAMPLE_ROWS[tname] ? JSON.stringify(SAMPLE_ROWS[tname], null, 2) : ''}</pre>
+            </div>
+
+            <div class="flex items-center gap-2 mt-2">
+              <button onclick="toggleTableDetails('${tname}')" id="toggle-btn-${tname}"
+                      class="flex-1 py-1.5 rounded-lg bg-elevated hover:bg-canvas text-slate-300 hover:text-white text-xs font-medium border border-borderline transition">
+                View ${colCount} Columns
+              </button>
+              <button onclick="copyTableDDL('${tname}')"
+                      class="px-2.5 py-1.5 rounded-lg bg-canvas hover:bg-elevated text-indigo-300 text-xs font-mono border border-borderline transition" title="Copy CREATE TABLE DDL + Governance Tags">
+                DDL
+              </button>
+              ${SAMPLE_ROWS[tname] ? `<button onclick="toggleSampleData('${tname}')" class="px-2.5 py-1.5 rounded-lg bg-canvas hover:bg-elevated text-emerald-300 text-xs font-mono border border-borderline transition">Sample</button>` : ''}
+            </div>
           </div>
         `;
         container.appendChild(card);

@@ -537,10 +537,12 @@ def stream(
     event_type: str = typer.Option(None, "--event-type", help="Filter by specific event type (e.g. purchase, add_to_cart)"),
     webhook: str = typer.Option(None, "--webhook", help="HTTP Webhook URL to POST JSON events to"),
     output: str = typer.Option(None, "--output", "-o", help="Append events to a .jsonl file"),
+    kafka_bootstrap: str = typer.Option(None, "--kafka-bootstrap", help="Kafka / Redpanda bootstrap servers (e.g. localhost:9092)"),
+    topic: str = typer.Option("ecommerce-events", "--topic", help="Kafka / Redpanda topic name"),
     json_lines: bool = typer.Option(False, "--json", help="Emit raw NDJSON / JSON Lines to stdout"),
     loop: bool = typer.Option(False, "--loop", help="Loop continuously"),
 ) -> None:
-    """Stream events in chronological order to stdout, a file, or HTTP webhook."""
+    """Stream events in chronological order to stdout, a file, Kafka/Redpanda, or HTTP webhook."""
     from .streamer import EventStreamer
 
     source_list = [s.strip() for s in sources.split(",")] if sources else None
@@ -556,6 +558,8 @@ def stream(
         interval_ms=interval_ms,
         webhook_url=webhook,
         output_file=output,
+        kafka_bootstrap=kafka_bootstrap,
+        kafka_topic=topic,
         raw_json=json_lines,
         loop=loop,
     )

@@ -85,9 +85,9 @@ class EventStreamer:
 
         # 1. Clickstream
         if "clickstream" in self.sources:
-            cs_path = self.data_dir / "clickstream.parquet"
-            if cs_path.exists():
-                df = pl.read_parquet(cs_path)
+            from .utils.writer import read_table_parquet
+            df = read_table_parquet(self.data_dir, "clickstream")
+            if df is not None and not df.is_empty():
                 for row in df.iter_rows(named=True):
                     etype = row.get("event_type", "unknown")
                     if self.event_type_filter and etype != self.event_type_filter:
@@ -166,6 +166,8 @@ class EventStreamer:
         max_delay_sec: float = 2.0,
         webhook_url: str | None = None,
         output_file: Path | str | None = None,
+        kafka_bootstrap: str | None = None,
+        kafka_topic: str = "ecommerce-events",
         raw_json: bool = False,
         loop: bool = False,
         on_event: Callable[[StreamEvent], None] | None = None,
@@ -189,15 +191,23 @@ class EventStreamer:
             return
 
         out_fp = open(output_file, "a") if output_file else None
+        kafka_producer, kafka_kind = self._init_kafka_producer(kafka_bootstrap) if kafka_bootstrap else (None, None)
 
         if not raw_json:
+            sinks = ["stdout"]
+            if webhook_url:
+                sinks.append(f"Webhook: {webhook_url}")
+            if output_file:
+                sinks.append(f"File: {output_file}")
+            if kafka_bootstrap:
+                sinks.append(f"Kafka: {kafka_bootstrap}/{kafka_topic}")
             console.print(
                 Panel(
                     f"[bold cyan]🌊 Live Event Streamer[/bold cyan]\n"
                     f"Dataset: [bold]{self.data_dir}[/bold]\n"
                     f"Total Events to Stream: [green]{len(self._events):,}[/green]\n"
                     f"Mode: [yellow]{f'Interval {interval_ms}ms' if interval_ms else f'Speed {speed}x' if speed > 0 else 'Burst (no delay)'}[/yellow]\n"
-                    f"Sinks: [magenta]{'Webhook: ' + webhook_url if webhook_url else 'stdout'}{', File: ' + str(output_file) if output_file else ''}[/magenta]",
+                    f"Sinks: [magenta]{', '.join(sinks)}[/magenta]",
                     border_style="cyan",
                 )
             )
@@ -234,6 +244,10 @@ class EventStreamer:
                     if webhook_url:
                         self._post_webhook(webhook_url, event_json)
 
+                    # 2b. Kafka / Redpanda
+                    if kafka_producer is not None:
+                        self._send_kafka(kafka_producer, kafka_kind, kafka_topic, event.event_id, event_json)
+
                     # 3. Custom callback
                     if on_event:
                         on_event(event)
@@ -255,6 +269,11 @@ class EventStreamer:
         finally:
             if out_fp:
                 out_fp.close()
+            if kafka_producer is not None:
+                try:
+                    kafka_producer.flush()
+                except Exception:
+                    pass
 
         elapsed = time.time() - start_clock
         rate = (events_emitted / elapsed) if elapsed > 0 else 0.0
@@ -264,6 +283,36 @@ class EventStreamer:
                 f"\n[bold green]✓ Stream finished![/bold green] "
                 f"Emitted [bold]{events_emitted:,}[/bold] events in {elapsed:.1f}s ({rate:.1f} events/sec)\n"
             )
+
+    def _init_kafka_producer(self, bootstrap_servers: str) -> tuple[Any, str]:
+        """Initialize confluent-kafka or kafka-python producer."""
+        try:
+            from confluent_kafka import Producer
+            return Producer({"bootstrap.servers": bootstrap_servers}), "confluent"
+        except ImportError:
+            try:
+                from kafka import KafkaProducer
+                return KafkaProducer(bootstrap_servers=bootstrap_servers), "kafka-python"
+            except ImportError as e:
+                raise ImportError(
+                    "Kafka streaming requires 'confluent-kafka' or 'kafka-python'. "
+                    "Install via: pip install confluent-kafka"
+                ) from e
+
+    def _send_kafka(
+        self,
+        producer: Any,
+        kind: str | None,
+        topic: str,
+        key: str,
+        value_json: str,
+    ) -> None:
+        """Publish an event to Kafka / Redpanda."""
+        if kind == "confluent":
+            producer.produce(topic, key=key.encode("utf-8"), value=value_json.encode("utf-8"))
+            producer.poll(0)
+        else:
+            producer.send(topic, key=key.encode("utf-8"), value=value_json.encode("utf-8"))
 
     def _post_webhook(self, url: str, json_str: str) -> None:
         """Post event JSON to webhook endpoint."""

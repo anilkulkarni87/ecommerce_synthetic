@@ -205,3 +205,24 @@ def test_direct_stream_to_duckdb_no_local_files(tmp_path: Path):
     assert conn.execute("SELECT COUNT(*) FROM live_ecom.customers").fetchone()[0] == 500
     assert conn.execute("SELECT COUNT(*) FROM live_ecom.v_omnichannel_sales").fetchone()[0] > 0
     conn.close()
+
+
+def test_multicurrency_vat_and_fulfillment_tables(tmp_path: Path):
+    output_dir = tmp_path / "global_fulfillment"
+    config = load_config(tier_name="small", seed=33, output_dir=output_dir, regions="US,GB,DE,JP")
+    orchestrator = Orchestrator(config)
+    orchestrator.run()
+
+    orders = pl.read_parquet(output_dir / "orders_online.parquet")
+    assert {"currency_code", "fx_rate_to_usd", "total_amount_usd", "tax_regime"}.issubset(set(orders.columns))
+    assert len(set(orders["currency_code"].to_list())) > 1
+    assert "VAT" in set(orders["tax_regime"].to_list())
+
+    shipments = pl.read_parquet(output_dir / "shipments.parquet")
+    returns = pl.read_parquet(output_dir / "returns.parquet")
+    inventory = pl.read_parquet(output_dir / "inventory_snapshots.parquet")
+    assert shipments.height > 0
+    assert inventory.height > 0
+    assert set(shipments["order_id"].to_list()).issubset(set(orders["order_id"].to_list()))
+    if returns.height > 0:
+        assert set(returns["order_id"].to_list()).issubset(set(orders["order_id"].to_list()))

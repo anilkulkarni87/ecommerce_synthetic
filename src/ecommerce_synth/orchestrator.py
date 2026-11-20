@@ -20,6 +20,7 @@ from .generators.customer_generator import CustomerGenerator
 from .generators.email_generator import EmailGenerator
 from .generators.experiment_generator import ExperimentGenerator
 from .generators.fraud_generator import FraudGenerator
+from .generators.fulfillment_generator import FulfillmentGenerator
 from .generators.loyalty_generator import LoyaltyGenerator
 from .generators.order_generator import OrderGenerator
 from .generators.product_generator import ProductGenerator
@@ -81,6 +82,16 @@ class Orchestrator:
                 "addresses": self.data["addresses"],
                 "products": self.data["products"],
                 "stores": self.data["stores"],
+            }, only
+        )
+
+        # 4b. Fulfillment & Inventory (shipments, returns, inventory_snapshots)
+        self._generate_and_write(
+            "fulfillment", FulfillmentGenerator, {
+                "orders_online": self.data.get("orders_online", pl.DataFrame()),
+                "order_items_online": self.data.get("order_items_online", pl.DataFrame()),
+                "stores": self.data.get("stores", pl.DataFrame()),
+                "products": self.data.get("products", pl.DataFrame()),
             }, only
         )
 

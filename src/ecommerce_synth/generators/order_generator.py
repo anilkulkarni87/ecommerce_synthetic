@@ -253,22 +253,38 @@ class OrderGenerator(BaseGenerator):
                 if coupon and self.rng.random() < 0.5:
                     order_discount = round(subtotal * self.rng.uniform(0.05, 0.15), 2)
 
-                # Tax
+                # Tax & Region Currency
+                region_configs = getattr(self.config, "region_configs", {}) or {}
                 if channel == "online":
                     addrs = addr_by_customer.get(cid, [])
                     ship_addr = next((a for a in addrs if a["address_type"] == "shipping" and a["is_default"]), None)
                     if ship_addr:
                         state = ship_addr["state"]
+                        country = ship_addr.get("country", "US")
                     else:
                         state = "CA"
-                    tax_rate = self.config.tax_rates.get(state, self.config.tax_rates["default"])
+                        country = "US"
                 else:
                     store_id = self.rng.choice(store_ids) if store_ids else "STORE-001"
                     state = store_states.get(store_id, "CA") if store_states else "CA"
-                    tax_rate = self.config.tax_rates.get(state, self.config.tax_rates["default"])
+                    addrs = addr_by_customer.get(cid, [])
+                    country = addrs[0].get("country", "US") if addrs else "US"
+
+                rc = region_configs.get(country)
+                currency_code = rc.currency if rc else "USD"
+                fx_rate = rc.fx_rate_to_usd if rc else 1.0
+                tax_regime = rc.tax_regime if rc else "SALES_TAX"
 
                 taxable = max(0, subtotal - order_discount)
-                tax = round(taxable * tax_rate, 2)
+                if country == "US" or not rc:
+                    tax_rate = self.config.tax_rates.get(state, self.config.tax_rates["default"])
+                    tax = round(taxable * tax_rate, 2)
+                elif tax_regime == "VAT":
+                    # Tax-inclusive: VAT is already embedded in shelf price
+                    tax = round(taxable * (rc.default_tax_rate / (1.0 + rc.default_tax_rate)), 2)
+                else:
+                    # GST / Sales Tax exclusive
+                    tax = round(taxable * rc.default_tax_rate, 2)
 
                 # Shipping (online only)
                 shipping = 0.0
@@ -283,7 +299,11 @@ class OrderGenerator(BaseGenerator):
                         rate_range = getattr(self.config.shipping.rates, ship_type)
                         shipping = round(self.rng.uniform(*rate_range), 2)
 
-                total = round(subtotal - order_discount + tax + shipping, 2)
+                if tax_regime == "VAT" and country != "US":
+                    total = round(taxable + shipping, 2)
+                else:
+                    total = round(taxable + tax + shipping, 2)
+                total_usd = round(total * fx_rate, 2)
 
                 # Status — persona-driven
                 if persona.is_fraudster and persona.fraud_type in ("card_testing",):
@@ -324,6 +344,10 @@ class OrderGenerator(BaseGenerator):
                         "tax_amount": tax,
                         "shipping_cost": shipping,
                         "total_amount": total,
+                        "currency_code": currency_code,
+                        "fx_rate_to_usd": fx_rate,
+                        "total_amount_usd": total_usd,
+                        "tax_regime": tax_regime,
                         "payment_method": payment,
                         "coupon_code": coupon,
                         "device_type": device,
@@ -352,6 +376,10 @@ class OrderGenerator(BaseGenerator):
                         "tax_amount": tax,
                         "discount_amount": order_discount,
                         "total_amount": total,
+                        "currency_code": currency_code,
+                        "fx_rate_to_usd": fx_rate,
+                        "total_amount_usd": total_usd,
+                        "tax_regime": tax_regime,
                         "payment_method": payment,
                         "coupon_code": coupon,
                     })
@@ -366,6 +394,8 @@ class OrderGenerator(BaseGenerator):
                 "tax_amount": pl.Float64,
                 "shipping_cost": pl.Float64,
                 "total_amount": pl.Float64,
+                "fx_rate_to_usd": pl.Float64,
+                "total_amount_usd": pl.Float64,
             }) if orders else self._empty_order_df(channel)
 
             items_df = pl.DataFrame(items).cast({
@@ -381,6 +411,8 @@ class OrderGenerator(BaseGenerator):
                 "tax_amount": pl.Float64,
                 "discount_amount": pl.Float64,
                 "total_amount": pl.Float64,
+                "fx_rate_to_usd": pl.Float64,
+                "total_amount_usd": pl.Float64,
             }) if orders else self._empty_order_df(channel)
 
             items_df = pl.DataFrame(items).cast({
@@ -482,7 +514,9 @@ class OrderGenerator(BaseGenerator):
                 "shipping_address_id": pl.Utf8, "billing_address_id": pl.Utf8,
                 "subtotal": pl.Float64, "discount_amount": pl.Float64,
                 "tax_amount": pl.Float64, "shipping_cost": pl.Float64,
-                "total_amount": pl.Float64, "payment_method": pl.Utf8,
+                "total_amount": pl.Float64, "currency_code": pl.Utf8,
+                "fx_rate_to_usd": pl.Float64, "total_amount_usd": pl.Float64,
+                "tax_regime": pl.Utf8, "payment_method": pl.Utf8,
                 "coupon_code": pl.Utf8, "device_type": pl.Utf8,
                 "session_id": pl.Utf8,
             })
@@ -493,7 +527,9 @@ class OrderGenerator(BaseGenerator):
                 "transaction_date": pl.Datetime, "register_id": pl.Utf8,
                 "employee_id": pl.Utf8, "subtotal": pl.Float64,
                 "tax_amount": pl.Float64, "discount_amount": pl.Float64,
-                "total_amount": pl.Float64, "payment_method": pl.Utf8,
+                "total_amount": pl.Float64, "currency_code": pl.Utf8,
+                "fx_rate_to_usd": pl.Float64, "total_amount_usd": pl.Float64,
+                "tax_regime": pl.Utf8, "payment_method": pl.Utf8,
                 "coupon_code": pl.Utf8,
             })
 

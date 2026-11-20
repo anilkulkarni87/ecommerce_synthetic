@@ -48,3 +48,31 @@ def test_event_streamer_to_jsonl(tmp_path: Path):
         lines = [line.strip() for line in f if line.strip()]
 
     assert len(lines) == 10
+
+
+def test_event_streamer_kafka_sink_mocked(tmp_path: Path):
+    import sys
+    from unittest.mock import MagicMock, patch
+    from ecommerce_synth.config import load_config
+    from ecommerce_synth.orchestrator import Orchestrator
+    from ecommerce_synth.streamer import EventStreamer
+
+    output_dir = tmp_path / "kafka_test_dataset"
+    config = load_config(tier_name="small", seed=57, output_dir=output_dir)
+    Orchestrator(config).run(only=["customers", "products", "orders", "clickstream"])
+
+    mock_producer = MagicMock()
+    mock_confluent = MagicMock()
+    mock_confluent.Producer.return_value = mock_producer
+
+    streamer = EventStreamer(output_dir, limit=5)
+    with patch.dict(sys.modules, {"confluent_kafka": mock_confluent}):
+        streamer.stream(
+            speed=0,
+            kafka_bootstrap="localhost:9092",
+            kafka_topic="ecom-test",
+            raw_json=True,
+        )
+
+    assert mock_producer.produce.call_count == 5
+    mock_producer.flush.assert_called_once()

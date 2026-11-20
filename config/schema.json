@@ -421,6 +421,28 @@
           "type": "string (UUID)",
           "nullable": false,
           "description": "Web browsing session identifier that originated this order"
+        },
+        "currency_code": {
+          "type": "string",
+          "nullable": false,
+          "description": "ISO 4217 currency code (USD, GBP, EUR, JPY, etc.)"
+        },
+        "fx_rate_to_usd": {
+          "type": "float",
+          "nullable": false,
+          "description": "Exchange rate to USD reporting currency"
+        },
+        "total_amount_usd": {
+          "type": "float",
+          "nullable": false,
+          "description": "USD-normalized order total",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
+        "tax_regime": {
+          "type": "string",
+          "nullable": false,
+          "description": "SALES_TAX (exclusive), VAT (inclusive), or GST"
         }
       }
     },
@@ -558,6 +580,28 @@
           "type": "string",
           "nullable": true,
           "description": "Coupon code if scanned"
+        },
+        "currency_code": {
+          "type": "string",
+          "nullable": false,
+          "description": "ISO 4217 currency code (USD, GBP, EUR, JPY, etc.)"
+        },
+        "fx_rate_to_usd": {
+          "type": "float",
+          "nullable": false,
+          "description": "Exchange rate to USD reporting currency"
+        },
+        "total_amount_usd": {
+          "type": "float",
+          "nullable": false,
+          "description": "USD-normalized order total",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
+        "tax_regime": {
+          "type": "string",
+          "nullable": false,
+          "description": "SALES_TAX (exclusive), VAT (inclusive), or GST"
         }
       }
     },
@@ -1174,6 +1218,161 @@
           "type": "string",
           "nullable": false,
           "description": "JSON-encoded anomaly characteristics"
+        }
+      }
+    },
+    "shipments": {
+      "file": "shipments.parquet",
+      "description": "Carrier tracking, shipping tier, and delivery SLA timestamps for non-cancelled online orders.",
+      "primary_key": "shipment_id",
+      "foreign_keys": {
+        "order_id": "orders_online.order_id"
+      },
+      "columns": {
+        "shipment_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Shipment primary key"
+        },
+        "order_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "FK to orders_online"
+        },
+        "carrier": {
+          "type": "string",
+          "nullable": false,
+          "description": "UPS, FedEx, USPS, DHL"
+        },
+        "tracking_number": {
+          "type": "string",
+          "nullable": false,
+          "description": "Carrier tracking identifier"
+        },
+        "shipping_tier": {
+          "type": "string",
+          "nullable": false,
+          "description": "standard, express, overnight"
+        },
+        "shipped_at": {
+          "type": "timestamp",
+          "nullable": false,
+          "description": "Carrier handoff timestamp"
+        },
+        "estimated_delivery_at": {
+          "type": "timestamp",
+          "nullable": false,
+          "description": "Promised SLA delivery timestamp"
+        },
+        "delivered_at": {
+          "type": "timestamp",
+          "nullable": true,
+          "description": "Actual delivery timestamp"
+        },
+        "status": {
+          "type": "string",
+          "nullable": false,
+          "description": "label_created, in_transit, delivered"
+        }
+      }
+    },
+    "returns": {
+      "file": "returns.parquet",
+      "description": "Item-level product returns, refund amounts, and restocking status for returned online orders.",
+      "primary_key": "return_id",
+      "foreign_keys": {
+        "order_id": "orders_online.order_id",
+        "order_item_id": "order_items_online.order_item_id",
+        "customer_id": "customers.customer_id"
+      },
+      "columns": {
+        "return_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Return primary key"
+        },
+        "order_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "FK to orders_online"
+        },
+        "order_item_id": {
+          "type": "string (UUID)",
+          "nullable": true,
+          "description": "FK to order_items_online"
+        },
+        "customer_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "FK to customers"
+        },
+        "return_reason": {
+          "type": "string",
+          "nullable": false,
+          "description": "wrong_size, damaged_in_transit, defective_product, not_as_described, changed_mind, arrived_late"
+        },
+        "refund_amount": {
+          "type": "float",
+          "nullable": false,
+          "description": "Refunded line amount",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
+        "returned_at": {
+          "type": "timestamp",
+          "nullable": false,
+          "description": "Return receipt timestamp"
+        },
+        "restocked": {
+          "type": "boolean",
+          "nullable": false,
+          "description": "Whether item returned to sellable inventory"
+        }
+      }
+    },
+    "inventory_snapshots": {
+      "file": "inventory_snapshots.parquet",
+      "description": "Store-level SKU on-hand quantities, reorder points, and stockout flags.",
+      "primary_key": "snapshot_id",
+      "foreign_keys": {
+        "store_id": "stores.store_id",
+        "product_id": "products.product_id"
+      },
+      "columns": {
+        "snapshot_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Snapshot primary key"
+        },
+        "snapshot_date": {
+          "type": "date",
+          "nullable": false,
+          "description": "Inventory snapshot date"
+        },
+        "store_id": {
+          "type": "string",
+          "nullable": false,
+          "description": "FK to stores"
+        },
+        "product_id": {
+          "type": "string",
+          "nullable": false,
+          "description": "FK to products"
+        },
+        "on_hand_qty": {
+          "type": "integer",
+          "nullable": false,
+          "description": "Units currently in stock"
+        },
+        "reorder_point": {
+          "type": "integer",
+          "nullable": false,
+          "description": "Replenishment threshold"
+        },
+        "is_stockout": {
+          "type": "boolean",
+          "nullable": false,
+          "description": "True when on_hand_qty == 0"
         }
       }
     }
