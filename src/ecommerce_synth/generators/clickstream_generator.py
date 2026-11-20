@@ -124,6 +124,13 @@ class ClickstreamGenerator(BaseGenerator):
         product_list = products.filter(pl.col("is_active")).to_dicts()
         categories = list(set(p["category"] for p in product_list))
 
+        # Persistent browser/device anonymous_id (cookie) per customer & device for pre-login stitching
+        cust_anon_ids: dict[tuple[str, str], str] = {}
+        for cid in customer_ids:
+            cust_anon_ids[(cid, "desktop")] = self._uuid()
+            cust_anon_ids[(cid, "mobile")] = self._uuid()
+            cust_anon_ids[(cid, "tablet")] = self._uuid()
+
         records: list[dict] = []
         event_count = 0
 
@@ -163,9 +170,11 @@ class ClickstreamGenerator(BaseGenerator):
                 if not events:
                     break
 
+                anon_id = cust_anon_ids.get((cid, ord_row["device_type"]), self._uuid()) if cid else self._uuid()
                 session_records = self._build_session_records(
                     events=events,
                     session_id=ord_row["session_id"],
+                    anonymous_id=anon_id,
                     cid=cid,
                     persona=persona,
                     device=ord_row["device_type"],
@@ -206,6 +215,15 @@ class ClickstreamGenerator(BaseGenerator):
                 break
 
             device = self._pick_weighted(DEVICE_TYPES, DEVICE_WEIGHTS)
+            if cid is not None:
+                anon_id = cust_anon_ids.get((cid, device), self._uuid())
+            elif customer_ids and self.rng.random() < 0.40:
+                # Simulate pre-login browsing on a known customer's persistent device cookie
+                anon_cid = self.rng.choice(customer_ids)
+                anon_id = cust_anon_ids.get((anon_cid, device), self._uuid())
+            else:
+                anon_id = self._uuid()
+
             session_date = random_date_in_range(
                 self.rng,
                 self.config.date_range.start,
@@ -217,6 +235,7 @@ class ClickstreamGenerator(BaseGenerator):
             session_records = self._build_session_records(
                 events=events,
                 session_id=self._uuid(),
+                anonymous_id=anon_id,
                 cid=cid,
                 persona=persona,
                 device=device,
@@ -257,6 +276,7 @@ class ClickstreamGenerator(BaseGenerator):
         *,
         events: list[str],
         session_id: str,
+        anonymous_id: str,
         cid: str | None,
         persona: CustomerPersona | None,
         device: str,
@@ -354,6 +374,7 @@ class ClickstreamGenerator(BaseGenerator):
             session_records.append({
                 "event_id": self._uuid(),
                 "session_id": session_id,
+                "anonymous_id": anonymous_id,
                 "customer_id": cid,
                 "event_timestamp": current_time,
                 "event_type": event_type,

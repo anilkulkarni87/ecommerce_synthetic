@@ -194,7 +194,7 @@ class ExperimentGenerator(BaseGenerator):
             "end_date": pl.Date, "status": pl.Utf8, "traffic_pct": pl.Float64,
         })
 
-        assign_df = pl.DataFrame(assignments).cast({
+        assign_df = pl.DataFrame(assignments, infer_schema_length=None).cast({
             "assigned_at": pl.Date,
             "converted": pl.Boolean,
             "conversion_value": pl.Float64,

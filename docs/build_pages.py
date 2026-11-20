@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds docs/index.html with embedded schema (19 core + 2 optional tables) and clean editorial UI."""
+"""Builds docs/index.html with embedded schema (22 core + 2 optional tables) and clean editorial UI."""
 
 import json
 from pathlib import Path
@@ -160,12 +160,12 @@ html_template = '''<!DOCTYPE html>
             Referentially-intact omnichannel retail datasets at warehouse scale.
           </h1>
           <p class="text-base text-slate-400 leading-relaxed max-w-[65ch] mb-8">
-            Generate deterministic synthetic ecommerce data across 19 core tables and optional GDPR consent and entity-resolution ground-truth tables. Stream directly into DuckDB, Snowflake, Databricks Unity Catalog, or BigQuery without writing local Parquet files.
+            Generate deterministic synthetic ecommerce data across 22 core tables (with decoupled POS, BOPIS/BORIS, guest checkout, and persistent clickstream device IDs) plus optional GDPR consent and cross-channel entity-resolution ground truth. Stream directly into DuckDB, Snowflake, Databricks Unity Catalog, or BigQuery without writing local Parquet files.
           </p>
 
           <div class="flex flex-wrap items-center gap-3 mb-10">
             <a href="#schema" class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition">
-              Browse 21-Table Dictionary
+              Browse 24-Table Dictionary
             </a>
             <a href="#tiers" class="px-5 py-2.5 rounded-lg bg-surface hover:bg-elevated text-slate-200 text-sm font-medium border border-borderline transition">
               Configure CLI &amp; Scale
@@ -216,7 +216,7 @@ html_template = '''<!DOCTYPE html>
               <p class="text-emerald-400">  ✓ Streamed clickstream — 50,000,000 rows (100 chunks)</p>
               <p class="text-slate-400 mt-1">Applying 31 PII/financial column governance tags...</p>
               <p class="text-slate-400">Deploying views: v_omnichannel_sales, v_customer_360</p>
-              <p class="text-slate-100 font-semibold mt-2">Direct Snowflake stream complete: 19 tables, 60.4M rows.</p>
+              <p class="text-slate-100 font-semibold mt-2">Direct Snowflake stream complete: 22 tables, 60.4M rows.</p>
             </div>
 
             <div id="term-content-generate" class="hidden">

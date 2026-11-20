@@ -104,7 +104,9 @@ class CustomerGenerator(BaseGenerator):
                 )
                 customers.append(mutated_cust)
                 ground_truth.append({
+                    "record_type": "customer",
                     "customer_id": cust_id,
+                    "instore_account_id": None,
                     "true_entity_id": orig_cust["customer_id"],
                     "is_duplicate": True,
                     "noise_type": noise_type,
@@ -203,15 +205,32 @@ class CustomerGenerator(BaseGenerator):
             }
             customers.append(cust_row)
 
+            # ~5% household sharing: distinct person sharing phone & address with an existing household
+            household_addr = None
+            if canonical_pool and self.rng.random() < 0.05:
+                hh_cust, hh_addr = self.rng.choice(canonical_pool)
+                if hh_addr.get("country", "US") == cust_country and hh_cust.get("phone") != "REDACTED":
+                    last_name = hh_cust["last_name"]
+                    phone = hh_cust["phone"]
+                    household_addr = hh_addr
+                    email = f"{first_name.lower()}.{last_name.lower()}{self.rng.randint(1, 9999)}@{self.rng.choice(['gmail.com', 'yahoo.com', 'outlook.com', 'icloud.com'])}"
+
             # Addresses: 1-3 per customer
-            if cust_country == "US":
+            if household_addr is not None:
+                street = household_addr["street_address"]
+                city = household_addr["city"]
+                state = household_addr["state"]
+                zip_code = household_addr["zip_code"]
+            elif cust_country == "US":
                 state = self._pick_weighted(states, state_weights)
                 zip_code = self.faker.zipcode_in_state(state)
+                city = loc_faker.city()
+                street = loc_faker.street_address()
             else:
                 state = getattr(loc_faker, "state_abbr", lambda: cust_country)() if hasattr(loc_faker, "state_abbr") else cust_country
                 zip_code = loc_faker.postcode()
-            city = loc_faker.city()
-            street = loc_faker.street_address()
+                city = loc_faker.city()
+                street = loc_faker.street_address()
 
             primary_addr = {
                 "street_address": street,
@@ -223,11 +242,15 @@ class CustomerGenerator(BaseGenerator):
             if identity_noise > 0:
                 canonical_pool.append((cust_row, primary_addr))
                 ground_truth.append({
+                    "record_type": "customer",
                     "customer_id": cust_id,
+                    "instore_account_id": None,
                     "true_entity_id": cust_id,
                     "is_duplicate": False,
                     "noise_type": "none",
                 })
+            elif len(canonical_pool) < 200:
+                canonical_pool.append((cust_row, primary_addr))
 
             # Primary billing+shipping (same address for most)
             for addr_type in ["billing", "shipping"]:
@@ -296,7 +319,12 @@ class CustomerGenerator(BaseGenerator):
 
         if identity_noise > 0:
             result["identity_ground_truth"] = pl.DataFrame(ground_truth).cast({
+                "record_type": pl.Utf8,
+                "customer_id": pl.Utf8,
+                "instore_account_id": pl.Utf8,
+                "true_entity_id": pl.Utf8,
                 "is_duplicate": pl.Boolean,
+                "noise_type": pl.Utf8,
             })
 
         if compliance_mode and consents:
@@ -315,7 +343,7 @@ class CustomerGenerator(BaseGenerator):
     ) -> tuple[dict, dict, str]:
         """Create a realistic duplicate customer profile with entity-resolution noise."""
         noise_type = self.rng.choice([
-            "email_alias", "phone_format", "nickname_typo", "household_split"
+            "email_alias", "phone_format", "nickname_typo", "household_split", "temporal_pii_change"
         ])
 
         first_name = orig_cust["first_name"]
@@ -359,6 +387,10 @@ class CustomerGenerator(BaseGenerator):
         elif noise_type == "household_split":
             # Same last name, phone, and address, but different email
             email = f"{first_name.lower()}_{last_name.lower()}{self.rng.randint(10, 99)}@outlook.com"
+        elif noise_type == "temporal_pii_change":
+            # Same person changed email and phone over time, same name/DOB/address
+            email = f"{first_name.lower()}.{last_name.lower()}.new{self.rng.randint(10, 99)}@icloud.com"
+            phone = self.faker.phone_number()
 
         created_at = random_timestamp_in_range(
             self.rng,

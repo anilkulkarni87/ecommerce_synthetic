@@ -67,6 +67,16 @@ class OrderGenerator(BaseGenerator):
         active_products = [p for p in product_records if p["is_active"]]
         store_ids = stores["store_id"].to_list()
         store_states = dict(zip(stores["store_id"].to_list(), stores["state"].to_list()))
+        store_countries = (
+            dict(zip(stores["store_id"].to_list(), stores["country"].to_list()))
+            if "country" in stores.columns
+            else {}
+        )
+        cust_emails = (
+            dict(zip(customers["customer_id"].to_list(), customers["email"].to_list()))
+            if "email" in customers.columns
+            else {}
+        )
 
         # Group addresses by customer
         addr_by_customer: dict[str, list[dict]] = {}
@@ -97,22 +107,20 @@ class OrderGenerator(BaseGenerator):
             addr_by_customer=addr_by_customer,
             target_count=target_online,
             channel="online",
-            store_ids=None,
-            store_states=None,
+            store_ids=store_ids,
+            store_states=store_states,
+            store_countries=store_countries,
+            cust_emails=cust_emails,
         )
 
-        # ---- Generate In-Store Accounts ----
-        instore_accounts = self._generate_instore_accounts(
-            customer_ids, personas, store_ids
+        # ---- Generate In-Store Accounts (decoupled POS registry: phone, email, or both) ----
+        instore_accounts, instore_to_customer, pos_only_shoppers = self._generate_instore_accounts(
+            customers, personas, store_ids
         )
 
         # ---- Generate In-Store POS ----
         target_instore = self.config.tier.instore_transactions
-        instore_account_ids = {
-            r["customer_id"]: r["instore_account_id"]
-            for r in instore_accounts.to_dicts()
-            if r["customer_id"] is not None
-        }
+        cust_to_instore_acct = {cid: acct_id for acct_id, cid in instore_to_customer.items()}
 
         instore_orders, instore_items = self._generate_orders(
             customer_ids=customer_ids,
@@ -125,11 +133,16 @@ class OrderGenerator(BaseGenerator):
             channel="instore",
             store_ids=store_ids,
             store_states=store_states,
-            instore_account_ids=instore_account_ids,
+            store_countries=store_countries,
+            cust_emails=cust_emails,
+            instore_account_ids=cust_to_instore_acct,
+            pos_only_shoppers=pos_only_shoppers,
         )
 
-        # Forward personas to downstream generators
+        # Forward personas and internal POS->customer mapping for downstream generators
         online_orders.__dict__["_personas"] = personas
+        instore_orders.__dict__["_instore_to_customer"] = instore_to_customer
+        instore_accounts.__dict__["_instore_to_customer"] = instore_to_customer
 
         return {
             "orders_online": online_orders,
@@ -151,29 +164,42 @@ class OrderGenerator(BaseGenerator):
         channel: str,
         store_ids: list[str] | None,
         store_states: dict[str, str] | None,
+        store_countries: dict[str, str] | None = None,
+        cust_emails: dict[str, str] | None = None,
         instore_account_ids: dict[str, str] | None = None,
+        pos_only_shoppers: dict[str, dict] | None = None,
     ) -> tuple[pl.DataFrame, pl.DataFrame]:
         """Generate orders + line items for a channel."""
 
         orders: list[dict] = []
         items: list[dict] = []
         order_count = 0
+        shopper_tokens: dict[str, str] = {}
+        walkin_token_pool = [f"tok_wi_{i:06x}" for i in range(50)]
 
-        # Distribute orders across customers weighted by persona
-        cust_order_counts: list[tuple[str, int]] = []
+        # Distribute orders across shoppers weighted by persona
+        # Entry tuple: (shopper_key, weight, persona, is_pos_only, home_store_id)
+        shopper_weights: list[tuple[str, int, CustomerPersona, bool, str | None]] = []
         total_weight = 0
         for cid in customer_ids:
             persona = personas.get(cid)
             if persona is None:
                 continue
-            # Instore: only omnichannel customers shop in-store
+            # Instore: only omnichannel digital customers shop in-store
             if channel == "instore" and not persona.is_omnichannel:
                 continue
             w = persona.orders_per_year
             if channel == "instore":
-                w = max(0, int(w * 0.4))  # fewer in-store than online
-            cust_order_counts.append((cid, w))
+                w = max(1, int(w * 0.4))  # fewer in-store than online
+            shopper_weights.append((cid, w, persona, False, None))
             total_weight += w
+
+        if channel == "instore" and pos_only_shoppers:
+            for acct_id, info in pos_only_shoppers.items():
+                p = info["persona"]
+                w = max(1, int(p.orders_per_year * 0.5))
+                shopper_weights.append((acct_id, w, p, True, info.get("store_id")))
+                total_weight += w
 
         if total_weight == 0:
             # Return empty DataFrames
@@ -182,11 +208,11 @@ class OrderGenerator(BaseGenerator):
         # Scale weights to hit target count (over ~2 years)
         scale_factor = target_count / (total_weight * 2) if total_weight > 0 else 1
 
-        for cid, base_weight in cust_order_counts:
+        for shopper_key, base_weight, persona, is_pos_only, home_store_id in shopper_weights:
             if order_count >= target_count:
                 break
 
-            persona = personas[cid]
+            cid = None if is_pos_only else shopper_key
             n_orders = max(0, int(round(base_weight * 2 * scale_factor)))
 
             # Add jitter
@@ -265,10 +291,12 @@ class OrderGenerator(BaseGenerator):
                         state = "CA"
                         country = "US"
                 else:
-                    store_id = self.rng.choice(store_ids) if store_ids else "STORE-001"
+                    if home_store_id and self.rng.random() < 0.70:
+                        store_id = home_store_id
+                    else:
+                        store_id = self.rng.choice(store_ids) if store_ids else "STORE-001"
                     state = store_states.get(store_id, "CA") if store_states else "CA"
-                    addrs = addr_by_customer.get(cid, [])
-                    country = addrs[0].get("country", "US") if addrs else "US"
+                    country = store_countries.get(store_id, "US") if store_countries else "US"
 
                 rc = region_configs.get(country)
                 currency_code = rc.currency if rc else "USD"
@@ -286,10 +314,16 @@ class OrderGenerator(BaseGenerator):
                     # GST / Sales Tax exclusive
                     tax = round(taxable * rc.default_tax_rate, 2)
 
-                # Shipping (online only)
+                # Fulfillment & Shipping (online only; BOPIS has free pickup)
+                fulfillment_type = "ship_to_home"
+                pickup_store_id = None
                 shipping = 0.0
                 if channel == "online":
-                    if subtotal >= self.config.shipping.free_threshold:
+                    if store_ids and self.rng.random() < 0.18:
+                        fulfillment_type = "bopis"
+                        pickup_store_id = self.rng.choice(store_ids)
+                        shipping = 0.0
+                    elif subtotal >= self.config.shipping.free_threshold:
                         shipping = 0.0
                     else:
                         ship_type = self._pick_weighted(
@@ -331,10 +365,25 @@ class OrderGenerator(BaseGenerator):
 
                     device = self._pick_weighted(DEVICE_TYPES, DEVICE_WEIGHTS)
                     payment = self._pick_weighted(PAYMENT_METHODS_ONLINE, PAYMENT_WEIGHTS_ONLINE)
+                    pay_token = None
+                    if payment in ("credit_card", "debit_card", "apple_pay"):
+                        pay_token = shopper_tokens.setdefault(shopper_key, f"tok_{self._uuid()[:12]}")
+
+                    # ~15% of non-fraudster online orders are guest checkouts (customer_id = NULL)
+                    is_guest = (not persona.is_fraudster) and (self.rng.random() < 0.15)
+                    cid_for_online = None if is_guest else cid
+                    guest_email = (
+                        (cust_emails.get(cid) if cust_emails else None) or self.faker.email()
+                        if is_guest
+                        else None
+                    )
 
                     orders.append({
                         "order_id": order_id,
-                        "customer_id": cid,
+                        "customer_id": cid_for_online,
+                        "guest_email": guest_email,
+                        "fulfillment_type": fulfillment_type,
+                        "pickup_store_id": pickup_store_id,
                         "order_date": ts,
                         "status": status,
                         "shipping_address_id": ship_id,
@@ -349,20 +398,31 @@ class OrderGenerator(BaseGenerator):
                         "total_amount_usd": total_usd,
                         "tax_regime": tax_regime,
                         "payment_method": payment,
+                        "payment_token": pay_token,
                         "coupon_code": coupon,
                         "device_type": device,
                         "session_id": self._uuid(),
                     })
                 else:
                     payment = self._pick_weighted(PAYMENT_METHODS_INSTORE, PAYMENT_WEIGHTS_INSTORE)
-                    instore_acct = instore_account_ids.get(cid) if instore_account_ids else None
+                    if is_pos_only:
+                        instore_acct = shopper_key
+                    else:
+                        instore_acct = instore_account_ids.get(cid) if (instore_account_ids and cid) else None
 
-                    # ~20% of in-store transactions are walk-in (no account)
+                    # ~20% of in-store transactions are anonymous walk-ins (no POS account)
                     if instore_acct is None or self.rng.random() < 0.20:
                         instore_acct = None
-                        cid_for_record = None
-                    else:
-                        cid_for_record = cid
+
+                    pay_token = None
+                    if payment in ("credit_card", "debit_card", "mobile_pay"):
+                        if instore_acct is not None:
+                            pay_token = shopper_tokens.setdefault(shopper_key, f"tok_{self._uuid()[:12]}")
+                        elif self.rng.random() < 0.30:
+                            pay_token = self.rng.choice(walkin_token_pool)
+
+                    # Real-world POS registers do not know the e-commerce customer_id UUID
+                    cid_for_record = None
 
                     orders.append({
                         "transaction_id": order_id,
@@ -381,6 +441,7 @@ class OrderGenerator(BaseGenerator):
                         "total_amount_usd": total_usd,
                         "tax_regime": tax_regime,
                         "payment_method": payment,
+                        "payment_token": pay_token,
                         "coupon_code": coupon,
                     })
 
@@ -443,73 +504,176 @@ class OrderGenerator(BaseGenerator):
             selected.append(self.rng.choice(pool))
         return selected
 
+    def _format_pos_phone(self, phone: str) -> str:
+        """Apply realistic POS register phone formatting variations (~20% of the time)."""
+        if self.rng.random() >= 0.20:
+            return phone
+        digits = "".join(ch for ch in phone if ch.isdigit())
+        if len(digits) < 10:
+            return phone
+        last10 = digits[-10:]
+        variant = self.rng.choice(["digits", "parens", "dots", "dashes"])
+        if variant == "digits":
+            return last10
+        if variant == "parens":
+            return f"({last10[:3]}) {last10[3:6]}-{last10[6:]}"
+        if variant == "dots":
+            return f"{last10[:3]}.{last10[3:6]}.{last10[6:]}"
+        return f"{last10[:3]}-{last10[3:6]}-{last10[6:]}"
+
+    def _format_pos_email(self, email: str) -> str:
+        """Apply realistic POS email casing/whitespace variations (~15% of the time)."""
+        if self.rng.random() >= 0.15:
+            return email
+        if self.rng.random() < 0.5:
+            return email.upper()
+        return f" {email.capitalize()} "
+
+    def _pick_pos_contact(
+        self,
+        phone: str | None,
+        email: str | None,
+    ) -> tuple[str | None, str | None]:
+        """Choose whether a POS shopper provides phone only, email only, or both."""
+        mode = self._pick_weighted(
+            ["phone_only", "email_only", "both"],
+            [0.45, 0.25, 0.30],
+        )
+        if mode == "phone_only" and phone:
+            return self._format_pos_phone(phone), None
+        if mode == "email_only" and email:
+            return None, self._format_pos_email(email)
+        return (
+            self._format_pos_phone(phone) if phone else None,
+            self._format_pos_email(email) if email else None,
+        )
+
     def _generate_instore_accounts(
         self,
-        customer_ids: list[str],
+        customers: pl.DataFrame,
         personas: dict[str, CustomerPersona],
         store_ids: list[str],
-    ) -> pl.DataFrame:
-        """Generate in-store POS accounts for omnichannel customers."""
+    ) -> tuple[pl.DataFrame, dict[str, str], dict[str, dict]]:
+        """Generate decoupled POS accounts (omnichannel + POS-only) with phone, email, or both."""
         records: list[dict] = []
+        instore_to_customer: dict[str, str] = {}
+        pos_only_shoppers: dict[str, dict] = {}
 
-        for cid in customer_ids:
+        cust_lookup = {
+            row["customer_id"]: row
+            for row in customers.select(["customer_id", "email", "phone"]).to_dicts()
+        }
+
+        for cid, cust_row in cust_lookup.items():
             persona = personas.get(cid)
             if persona is None or not persona.is_omnichannel:
                 continue
 
             total_visits = self.rng.randint(1, 50) if persona.orders_per_year > 3 else self.rng.randint(1, 10)
-
             created = random_timestamp(
                 self.rng,
                 random_date_in_range(self.rng, self.config.date_range.start, self.config.date_range.end),
                 "instore",
             )
-
             last_visit = random_date_in_range(
                 self.rng,
                 created.date(),
                 self.config.date_range.end,
             )
 
+            acct_id = self._uuid()
+            raw_phone = cust_row.get("phone")
+            raw_email = cust_row.get("email")
+            # ~5% temporal PII drift at POS (e.g. updated phone/email while keeping the other)
+            if raw_phone and raw_email and self.rng.random() < 0.05:
+                if self.rng.random() < 0.5:
+                    raw_email = f"pos.{raw_email.split('@')[0]}@gmail.com"
+                else:
+                    raw_phone = self.faker.phone_number()
+                pos_phone = self._format_pos_phone(raw_phone)
+                pos_email = self._format_pos_email(raw_email)
+            else:
+                pos_phone, pos_email = self._pick_pos_contact(raw_phone, raw_email)
+            instore_to_customer[acct_id] = cid
+
             records.append({
-                "instore_account_id": self._uuid(),
-                "customer_id": cid,
+                "instore_account_id": acct_id,
+                "customer_id": None,
                 "store_id": self.rng.choice(store_ids),
-                "phone_number": self.faker.phone_number(),
+                "phone_number": pos_phone,
+                "email": pos_email,
                 "created_at": created,
                 "last_visit_date": last_visit,
                 "total_visits": total_visits,
             })
 
-        # Add some unlinked POS accounts (walk-in regulars without online accounts)
-        n_unlinked = max(1, int(len(records) * 0.15))
-        for _ in range(n_unlinked):
-            records.append({
-                "instore_account_id": self._uuid(),
-                "customer_id": None,
-                "store_id": self.rng.choice(store_ids),
-                "phone_number": self.faker.phone_number(),
-                "created_at": random_timestamp(
-                    self.rng,
-                    random_date_in_range(self.rng, self.config.date_range.start, self.config.date_range.end),
-                    "instore",
-                ),
-                "last_visit_date": random_date_in_range(
-                    self.rng, self.config.date_range.start, self.config.date_range.end
-                ),
-                "total_visits": self.rng.randint(1, 20),
-            })
+        # Add POS-only shoppers (~40% of total POS accounts) who never registered online
+        n_pos_only = max(1, int(len(records) * 0.70))
+        for _ in range(n_pos_only):
+            acct_id = self._uuid()
+            home_store = self.rng.choice(store_ids)
+            pos_phone, pos_email = self._pick_pos_contact(
+                self.faker.phone_number(),
+                self.faker.email(),
+            )
+            created = random_timestamp(
+                self.rng,
+                random_date_in_range(self.rng, self.config.date_range.start, self.config.date_range.end),
+                "instore",
+            )
+            last_visit = random_date_in_range(
+                self.rng,
+                created.date(),
+                self.config.date_range.end,
+            )
+            total_visits = self.rng.randint(1, 20)
 
-        return pl.DataFrame(records).cast({
+            records.append({
+                "instore_account_id": acct_id,
+                "customer_id": None,
+                "store_id": home_store,
+                "phone_number": pos_phone,
+                "email": pos_email,
+                "created_at": created,
+                "last_visit_date": last_visit,
+                "total_visits": total_visits,
+            })
+            pos_only_shoppers[acct_id] = {
+                "store_id": home_store,
+                "persona": CustomerPersona(
+                    persona_name="occasional",
+                    orders_per_year=max(2, total_visits // 2),
+                    loyalty_tier=None,
+                    email_open_rate=0.0,
+                    email_click_rate=0.0,
+                    browse_to_buy=0.0,
+                    avg_cart_items=2,
+                    preferred_categories=None,
+                    return_rate=0.05,
+                    review_rate=0.0,
+                    always_uses_coupon=False,
+                    is_omnichannel=False,
+                ),
+            }
+
+        df = pl.DataFrame(records).cast({
+            "instore_account_id": pl.Utf8,
+            "customer_id": pl.Utf8,
+            "store_id": pl.Utf8,
+            "phone_number": pl.Utf8,
+            "email": pl.Utf8,
             "created_at": pl.Datetime,
             "last_visit_date": pl.Date,
             "total_visits": pl.Int64,
         })
+        return df, instore_to_customer, pos_only_shoppers
 
     def _empty_order_df(self, channel: str) -> pl.DataFrame:
         if channel == "online":
             return pl.DataFrame(schema={
                 "order_id": pl.Utf8, "customer_id": pl.Utf8,
+                "guest_email": pl.Utf8, "fulfillment_type": pl.Utf8,
+                "pickup_store_id": pl.Utf8,
                 "order_date": pl.Datetime, "status": pl.Utf8,
                 "shipping_address_id": pl.Utf8, "billing_address_id": pl.Utf8,
                 "subtotal": pl.Float64, "discount_amount": pl.Float64,
@@ -517,6 +681,7 @@ class OrderGenerator(BaseGenerator):
                 "total_amount": pl.Float64, "currency_code": pl.Utf8,
                 "fx_rate_to_usd": pl.Float64, "total_amount_usd": pl.Float64,
                 "tax_regime": pl.Utf8, "payment_method": pl.Utf8,
+                "payment_token": pl.Utf8,
                 "coupon_code": pl.Utf8, "device_type": pl.Utf8,
                 "session_id": pl.Utf8,
             })
@@ -530,7 +695,7 @@ class OrderGenerator(BaseGenerator):
                 "total_amount": pl.Float64, "currency_code": pl.Utf8,
                 "fx_rate_to_usd": pl.Float64, "total_amount_usd": pl.Float64,
                 "tax_regime": pl.Utf8, "payment_method": pl.Utf8,
-                "coupon_code": pl.Utf8,
+                "payment_token": pl.Utf8, "coupon_code": pl.Utf8,
             })
 
     def _empty_items_df(self, channel: str) -> pl.DataFrame:

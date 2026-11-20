@@ -47,45 +47,55 @@ class FulfillmentGenerator(BaseGenerator):
             for it in order_items_online.select(["order_id", "order_item_id", "line_total"]).to_dicts():
                 items_by_order.setdefault(it["order_id"], []).append(it)
 
+        store_ids = stores["store_id"].to_list() if stores is not None and not stores.is_empty() else []
+
         if orders_online is not None and not orders_online.is_empty():
-            for ord_row in orders_online.select([
-                "order_id", "customer_id", "order_date", "status", "shipping_cost"
-            ]).to_dicts():
+            cols = ["order_id", "customer_id", "order_date", "status", "shipping_cost"]
+            has_fulfillment = "fulfillment_type" in orders_online.columns
+            if has_fulfillment:
+                cols.append("fulfillment_type")
+            for ord_row in orders_online.select(cols).to_dicts():
                 status = ord_row["status"]
                 if status == "cancelled":
                     continue
 
                 oid = ord_row["order_id"]
                 odate = ord_row["order_date"]
-                carrier = self._pick_weighted(CARRIERS, CARRIER_WEIGHTS)
-                tier = "overnight" if ord_row["shipping_cost"] >= 20 else (
-                    "express" if ord_row["shipping_cost"] >= 10 else "standard"
-                )
-                min_d, max_d = TIER_DAYS[tier]
-                shipped_at = odate + timedelta(hours=self.rng.randint(2, 36))
-                est_delivery = shipped_at + timedelta(days=self.rng.randint(min_d, max_d))
+                is_bopis = has_fulfillment and ord_row.get("fulfillment_type") == "bopis"
 
-                if status in ("delivered", "returned"):
-                    delivered_at = est_delivery + timedelta(hours=self.rng.randint(-12, 24))
-                    ship_status = "delivered"
-                elif status == "shipped":
-                    delivered_at = None
-                    ship_status = "in_transit"
+                if not is_bopis:
+                    carrier = self._pick_weighted(CARRIERS, CARRIER_WEIGHTS)
+                    tier = "overnight" if ord_row["shipping_cost"] >= 20 else (
+                        "express" if ord_row["shipping_cost"] >= 10 else "standard"
+                    )
+                    min_d, max_d = TIER_DAYS[tier]
+                    shipped_at = odate + timedelta(hours=self.rng.randint(2, 36))
+                    est_delivery = shipped_at + timedelta(days=self.rng.randint(min_d, max_d))
+
+                    if status in ("delivered", "returned"):
+                        delivered_at = est_delivery + timedelta(hours=self.rng.randint(-12, 24))
+                        ship_status = "delivered"
+                    elif status == "shipped":
+                        delivered_at = None
+                        ship_status = "in_transit"
+                    else:
+                        delivered_at = None
+                        ship_status = "label_created"
+
+                    shipments.append({
+                        "shipment_id": self._uuid(),
+                        "order_id": oid,
+                        "carrier": carrier,
+                        "tracking_number": f"{carrier[:2].upper()}{self.rng.randint(1000000000, 9999999999)}",
+                        "shipping_tier": tier,
+                        "shipped_at": shipped_at,
+                        "estimated_delivery_at": est_delivery,
+                        "delivered_at": delivered_at,
+                        "status": ship_status,
+                    })
                 else:
-                    delivered_at = None
-                    ship_status = "label_created"
-
-                shipments.append({
-                    "shipment_id": self._uuid(),
-                    "order_id": oid,
-                    "carrier": carrier,
-                    "tracking_number": f"{carrier[:2].upper()}{self.rng.randint(1000000000, 9999999999)}",
-                    "shipping_tier": tier,
-                    "shipped_at": shipped_at,
-                    "estimated_delivery_at": est_delivery,
-                    "delivered_at": delivered_at,
-                    "status": ship_status,
-                })
+                    delivered_at = odate + timedelta(hours=self.rng.randint(2, 24))
+                    shipped_at = odate
 
                 if status == "returned":
                     ord_items = items_by_order.get(oid, [])
@@ -97,11 +107,14 @@ class FulfillmentGenerator(BaseGenerator):
                         ret_item_id = None
                         refund_amt = 0.0
                     base_dt = delivered_at or shipped_at
+                    is_boris = bool(store_ids) and (is_bopis or self.rng.random() < 0.35)
                     returns.append({
                         "return_id": self._uuid(),
                         "order_id": oid,
                         "order_item_id": ret_item_id,
                         "customer_id": ord_row["customer_id"],
+                        "return_channel": "instore" if is_boris else "mail",
+                        "return_store_id": self.rng.choice(store_ids) if is_boris else None,
                         "return_reason": self.rng.choice(RETURN_REASONS),
                         "refund_amount": refund_amt,
                         "returned_at": base_dt + timedelta(days=self.rng.randint(1, 21)),
@@ -110,7 +123,6 @@ class FulfillmentGenerator(BaseGenerator):
 
         # Inventory snapshots (sample store x SKU combinations scaled cleanly)
         snapshots: list[dict] = []
-        store_ids = stores["store_id"].to_list() if stores is not None and not stores.is_empty() else []
         product_ids = products.filter(pl.col("is_active"))["product_id"].to_list() if products is not None and not products.is_empty() else []
 
         if store_ids and product_ids:
@@ -141,12 +153,14 @@ class FulfillmentGenerator(BaseGenerator):
         })
 
         returns_df = pl.DataFrame(returns).cast({
+            "return_store_id": pl.Utf8,
             "refund_amount": pl.Float64,
             "returned_at": pl.Datetime,
             "restocked": pl.Boolean,
         }) if returns else pl.DataFrame(schema={
             "return_id": pl.Utf8, "order_id": pl.Utf8, "order_item_id": pl.Utf8,
-            "customer_id": pl.Utf8, "return_reason": pl.Utf8,
+            "customer_id": pl.Utf8, "return_channel": pl.Utf8, "return_store_id": pl.Utf8,
+            "return_reason": pl.Utf8,
             "refund_amount": pl.Float64, "returned_at": pl.Datetime, "restocked": pl.Boolean,
         })
 

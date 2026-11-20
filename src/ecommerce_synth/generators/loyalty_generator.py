@@ -76,9 +76,18 @@ class LoyaltyGenerator(BaseGenerator):
                     row["order_id"],
                 ))
 
+        instore_to_customer: dict[str, str] = (
+            orders_instore.__dict__.get("_instore_to_customer", {})
+            if orders_instore.height > 0
+            else {}
+        )
+
         if orders_instore.height > 0:
-            for row in orders_instore.select(["customer_id", "transaction_date", "total_amount", "transaction_id"]).to_dicts():
-                cid = row["customer_id"]
+            cols = ["customer_id", "transaction_date", "total_amount", "transaction_id"]
+            if "instore_account_id" in orders_instore.columns:
+                cols.append("instore_account_id")
+            for row in orders_instore.select(cols).to_dicts():
+                cid = row["customer_id"] or instore_to_customer.get(row.get("instore_account_id"))
                 if cid is None:
                     continue
                 if cid not in order_history:

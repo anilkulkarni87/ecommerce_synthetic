@@ -12,10 +12,11 @@ A realistic, referentially-intact omnichannel synthetic ecommerce data generator
 
 ## ✨ Features
 
-- **Omnichannel Simulation:** Models both online e-commerce transactions and in-store Point-of-Sale (POS) purchases.
-- **Referential Integrity:** Complete foreign-key consistency across 19 interconnected tables (customers, orders, line items, stores, catalog, clickstream, email, loyalty, reviews, support, experiments, fraud).
+- **Omnichannel Simulation:** Models decoupled online e-commerce (`orders_online`, guest checkout, BOPIS pickup, BORIS store returns) and brick-and-mortar Point-of-Sale (`instore_accounts` with phone/email capture, POS-only shoppers, `orders_instore`, `payment_token` card fingerprints).
+- **Referential Integrity:** Complete foreign-key consistency across 22 core tables (including `shipments`, `returns`, `inventory_snapshots`) plus optional `customer_consents` and `identity_ground_truth`.
 - **Behavioral Personas:** Generates realistic behavioral variations using customer personas (Power Shopper, Regular, Occasional, Bargain Hunter, One-and-Done, Window Shopper, Fraudster).
-- **Full Clickstream Funnel:** Browsing sessions with realistic conversion funnels (`page_view` → `search` → `product_view` → `add_to_cart` → `begin_checkout` → `purchase`).
+- **Full Clickstream Funnel:** Browsing sessions with persistent `anonymous_id` device cookies for pre-login session stitching and realistic conversion funnels (`page_view` → `search` → `product_view` → `add_to_cart` → `begin_checkout` → `purchase`).
+- **Multi-Currency & Tax Regimes:** Regional localization (`--regions US,GB,DE,JP`) across customers, stores, and orders with `currency_code`, `fx_rate_to_usd`, `total_amount_usd`, and VAT/GST/Sales Tax logic.
 - **Fraud & Anomaly Injection:** Configurable fraud injection (card testing, account takeover, promo abuse, refund abuse, synthetic identity, velocity spikes) with ground-truth ML labels.
 - **Incremental Generation:** Simulate daily pipeline loads ("give me yesterday's data") for testing ETL/ELT pipelines and data warehouses.
 - **Configurable Scale:** Tiers from **Small** (500 customers, 1.5K orders) to **XL** (5M customers, 14M orders, 500M clickstream events).

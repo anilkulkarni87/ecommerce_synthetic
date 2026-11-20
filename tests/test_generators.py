@@ -86,6 +86,8 @@ def test_order_generator(small_config):
     assert order_res["orders_online"].height > 0
     assert order_res["order_items_online"].height >= order_res["orders_online"].height
     assert order_res["orders_instore"].height > 0
+    assert "email" in order_res["instore_accounts"].columns
+    assert len(order_res["orders_instore"].__dict__.get("_instore_to_customer", {})) > 0
 
 
 def test_clickstream_generator(small_config):

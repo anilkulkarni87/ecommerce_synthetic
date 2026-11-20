@@ -104,12 +104,12 @@
             Referentially-intact omnichannel retail datasets at warehouse scale.
           </h1>
           <p class="text-base text-slate-400 leading-relaxed max-w-[65ch] mb-8">
-            Generate deterministic synthetic ecommerce data across 19 core tables and optional GDPR consent and entity-resolution ground-truth tables. Stream directly into DuckDB, Snowflake, Databricks Unity Catalog, or BigQuery without writing local Parquet files.
+            Generate deterministic synthetic ecommerce data across 22 core tables (with decoupled POS, BOPIS/BORIS, guest checkout, and persistent clickstream device IDs) plus optional GDPR consent and cross-channel entity-resolution ground truth. Stream directly into DuckDB, Snowflake, Databricks Unity Catalog, or BigQuery without writing local Parquet files.
           </p>
 
           <div class="flex flex-wrap items-center gap-3 mb-10">
             <a href="#schema" class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition">
-              Browse 21-Table Dictionary
+              Browse 24-Table Dictionary
             </a>
             <a href="#tiers" class="px-5 py-2.5 rounded-lg bg-surface hover:bg-elevated text-slate-200 text-sm font-medium border border-borderline transition">
               Configure CLI &amp; Scale
@@ -160,7 +160,7 @@
               <p class="text-emerald-400">  ✓ Streamed clickstream — 50,000,000 rows (100 chunks)</p>
               <p class="text-slate-400 mt-1">Applying 31 PII/financial column governance tags...</p>
               <p class="text-slate-400">Deploying views: v_omnichannel_sales, v_customer_360</p>
-              <p class="text-slate-100 font-semibold mt-2">Direct Snowflake stream complete: 19 tables, 60.4M rows.</p>
+              <p class="text-slate-100 font-semibold mt-2">Direct Snowflake stream complete: 22 tables, 60.4M rows.</p>
             </div>
 
             <div id="term-content-generate" class="hidden">
@@ -992,6 +992,11 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
           "nullable": false,
           "description": "Geographic region (Northeast, West, etc.)"
         },
+        "country": {
+          "type": "string",
+          "nullable": false,
+          "description": "ISO 3166-1 alpha-2 country code (e.g. US, GB, DE, JP)"
+        },
         "opened_date": {
           "type": "date",
           "nullable": false,
@@ -1037,8 +1042,15 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
         },
         "phone_number": {
           "type": "string",
-          "nullable": false,
-          "description": "Phone number for identity resolution",
+          "nullable": true,
+          "description": "Phone number captured at POS (nullable; customer may provide phone, email, or both)",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
+        },
+        "email": {
+          "type": "string",
+          "nullable": true,
+          "description": "Email address captured at POS for digital receipts/rewards (nullable)",
           "pii_classification": "DIRECT_PII",
           "sensitivity": "HIGH"
         },
@@ -1066,9 +1078,10 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
       "description": "E-commerce web checkout orders.",
       "primary_key": "order_id",
       "foreign_keys": {
-        "customer_id": "customers.customer_id",
+        "customer_id": "customers.customer_id (nullable)",
         "shipping_address_id": "addresses.address_id",
-        "billing_address_id": "addresses.address_id"
+        "billing_address_id": "addresses.address_id",
+        "pickup_store_id": "stores.store_id (nullable)"
       },
       "columns": {
         "order_id": {
@@ -1078,8 +1091,25 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
         },
         "customer_id": {
           "type": "string (UUID)",
+          "nullable": true,
+          "description": "FK to customers (null for guest checkout)"
+        },
+        "guest_email": {
+          "type": "string",
+          "nullable": true,
+          "description": "Email captured at guest checkout when customer_id is null",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
+        },
+        "fulfillment_type": {
+          "type": "string",
           "nullable": false,
-          "description": "FK to customers"
+          "description": "ship_to_home or bopis (Buy Online, Pick Up In Store)"
+        },
+        "pickup_store_id": {
+          "type": "string",
+          "nullable": true,
+          "description": "FK to stores for BOPIS pickup orders"
         },
         "order_date": {
           "type": "timestamp",
@@ -1140,6 +1170,13 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
           "type": "string",
           "nullable": false,
           "description": "credit_card, debit_card, paypal, apple_pay, gift_card",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
+        "payment_token": {
+          "type": "string",
+          "nullable": true,
+          "description": "Tokenized card/wallet fingerprint for cross-channel attribution & fraud",
           "pii_classification": "FINANCIAL",
           "sensitivity": "MEDIUM"
         },
@@ -1316,6 +1353,13 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
           "pii_classification": "FINANCIAL",
           "sensitivity": "MEDIUM"
         },
+        "payment_token": {
+          "type": "string",
+          "nullable": true,
+          "description": "Tokenized card/wallet fingerprint for repeat walk-in & cross-channel stitching",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
         "coupon_code": {
           "type": "string",
           "nullable": true,
@@ -1417,6 +1461,11 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
           "type": "string (UUID)",
           "nullable": false,
           "description": "Session grouping key (stitches to orders_online.session_id)"
+        },
+        "anonymous_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Persistent browser/device cookie ID for pre-login session stitching"
         },
         "customer_id": {
           "type": "string (UUID)",
@@ -2069,8 +2118,18 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
         },
         "customer_id": {
           "type": "string (UUID)",
+          "nullable": true,
+          "description": "FK to customers (null for guest orders)"
+        },
+        "return_channel": {
+          "type": "string",
           "nullable": false,
-          "description": "FK to customers"
+          "description": "mail or instore (BORIS: Buy Online, Return In Store)"
+        },
+        "return_store_id": {
+          "type": "string",
+          "nullable": true,
+          "description": "FK to stores when returned in-store (BORIS)"
         },
         "return_reason": {
           "type": "string",
@@ -2192,32 +2251,42 @@ ORDER BY usd_consolidated_gmv DESC;</pre>
     "identity_ground_truth": {
       "file": "identity_ground_truth.parquet",
       "optional_flag": "--identity-noise",
-      "description": "Canonical entity-resolution ground truth mapping fragmented duplicate customer profiles back to their true_entity_id (generated when --identity-noise > 0).",
-      "primary_key": "customer_id",
+      "description": "Cross-channel entity-resolution ground truth mapping fragmented customers and decoupled instore_accounts back to their true_entity_id (generated when --identity-noise > 0).",
+      "primary_key": "true_entity_id",
       "foreign_keys": {
-        "customer_id": "customers.customer_id",
-        "true_entity_id": "customers.customer_id"
+        "customer_id": "customers.customer_id (nullable)",
+        "instore_account_id": "instore_accounts.instore_account_id (nullable)"
       },
       "columns": {
+        "record_type": {
+          "type": "string",
+          "nullable": false,
+          "description": "Source table type: customer or instore_account"
+        },
         "customer_id": {
           "type": "string (UUID)",
-          "nullable": false,
-          "description": "FK to customers (primary key)"
+          "nullable": true,
+          "description": "FK to customers when record_type is customer"
+        },
+        "instore_account_id": {
+          "type": "string (UUID)",
+          "nullable": true,
+          "description": "FK to instore_accounts when record_type is instore_account"
         },
         "true_entity_id": {
           "type": "string (UUID)",
           "nullable": false,
-          "description": "Canonical real-world person customer_id"
+          "description": "Canonical real-world person entity ID (customer_id or POS-only instore_account_id)"
         },
         "is_duplicate": {
           "type": "boolean",
           "nullable": false,
-          "description": "True if this row is an injected duplicate profile"
+          "description": "True if this row is an injected duplicate or cross-channel POS match"
         },
         "noise_type": {
           "type": "string",
           "nullable": false,
-          "description": "Mutation type: none, email_alias, phone_format, nickname_typo, household_split"
+          "description": "Mutation type: none, email_alias, phone_format, nickname_typo, household_split, temporal_pii_change, pos_cross_channel, pos_only"
         }
       },
       "domain": "Governance & Compliance",

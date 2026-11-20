@@ -93,11 +93,39 @@ class DatasetProfiler:
             for row in customers.group_by("customer_segment").len().iter_rows(named=True):
                 segments[row["customer_segment"]] = row["len"]
 
-        # Omnichannel customers (online customer who also shopped in-store or has in-store account)
+        # Omnichannel customers (online customer who also shopped in-store or has a matching POS account)
         online_cids = set(orders_online["customer_id"].drop_nulls().to_list()) if orders_online.height > 0 else set()
         instore_cids = set(orders_instore["customer_id"].drop_nulls().to_list()) if orders_instore.height > 0 else set()
         if instore_accounts.height > 0 and "customer_id" in instore_accounts.columns:
             instore_cids.update(instore_accounts["customer_id"].drop_nulls().to_list())
+
+        # Also stitch decoupled POS accounts via normalized email / phone_number
+        if instore_accounts.height > 0 and customers.height > 0:
+            email_to_cid: dict[str, str] = {}
+            phone_to_cid: dict[str, str] = {}
+            for c_row in customers.select(["customer_id", "email", "phone"]).to_dicts():
+                if c_row.get("email"):
+                    email_to_cid[c_row["email"].strip().lower()] = c_row["customer_id"]
+                if c_row.get("phone"):
+                    digits = "".join(ch for ch in c_row["phone"] if ch.isdigit())[-10:]
+                    if len(digits) >= 7:
+                        phone_to_cid[digits] = c_row["customer_id"]
+
+            pos_cols = [c for c in ("email", "phone_number") if c in instore_accounts.columns]
+            if pos_cols:
+                for pos_row in instore_accounts.select(pos_cols).to_dicts():
+                    pos_email = pos_row.get("email")
+                    if pos_email:
+                        matched = email_to_cid.get(pos_email.strip().lower())
+                        if matched:
+                            instore_cids.add(matched)
+                    pos_phone = pos_row.get("phone_number")
+                    if pos_phone:
+                        digits = "".join(ch for ch in pos_phone if ch.isdigit())[-10:]
+                        if len(digits) >= 7:
+                            matched = phone_to_cid.get(digits)
+                            if matched:
+                                instore_cids.add(matched)
 
         omnichannel_cids = online_cids.intersection(instore_cids)
         omnichannel_count = len(omnichannel_cids)

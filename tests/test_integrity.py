@@ -38,10 +38,16 @@ def test_orders_customers_fk(generated_dataset: Path):
     orders_online = pl.read_parquet(generated_dataset / "orders_online.parquet")
 
     customer_ids = set(customers["customer_id"].to_list())
-    order_customer_ids = orders_online["customer_id"].to_list()
+    known_orders = orders_online.filter(pl.col("customer_id").is_not_null())
+    assert known_orders.height > 0
 
-    for cid in order_customer_ids:
+    for cid in known_orders["customer_id"].to_list():
         assert cid in customer_ids, f"Order customer_id {cid} not found in customers"
+
+    # Guest checkouts should have null customer_id and non-null guest_email
+    guests = orders_online.filter(pl.col("customer_id").is_null())
+    if guests.height > 0:
+        assert guests["guest_email"].null_count() == 0
 
 
 def test_order_items_online_fk(generated_dataset: Path):
@@ -109,17 +115,25 @@ def test_identity_noise_end_to_end(tmp_path: Path):
     orchestrator.run()
 
     customers = pl.read_parquet(output_dir / "customers.parquet")
+    instore_accounts = pl.read_parquet(output_dir / "instore_accounts.parquet")
     gt_path = output_dir / "identity_ground_truth.parquet"
     assert gt_path.exists()
 
     gt = pl.read_parquet(gt_path)
-    assert gt.height == customers.height
+    assert gt.height == customers.height + instore_accounts.height
     assert gt.filter(pl.col("is_duplicate")).height > 0
 
     cust_ids = set(customers["customer_id"].to_list())
-    assert set(gt["customer_id"].to_list()) == cust_ids
+    acct_ids = set(instore_accounts["instore_account_id"].to_list())
+    gt_cust = gt.filter(pl.col("record_type") == "customer")
+    gt_pos = gt.filter(pl.col("record_type") == "instore_account")
+    assert set(gt_cust["customer_id"].to_list()) == cust_ids
+    assert set(gt_pos["instore_account_id"].to_list()) == acct_ids
+    assert "pos_cross_channel" in set(gt_pos["noise_type"].to_list())
+    assert "pos_only" in set(gt_pos["noise_type"].to_list())
+    valid_entities = cust_ids | acct_ids
     for teid in gt["true_entity_id"].to_list():
-        assert teid in cust_ids
+        assert teid in valid_entities
 
 
 def test_chunked_parquet_persistence_and_duckdb(tmp_path: Path):
@@ -226,3 +240,58 @@ def test_multicurrency_vat_and_fulfillment_tables(tmp_path: Path):
     assert set(shipments["order_id"].to_list()).issubset(set(orders["order_id"].to_list()))
     if returns.height > 0:
         assert set(returns["order_id"].to_list()).issubset(set(orders["order_id"].to_list()))
+
+
+def test_decoupled_pos_vs_digital_realism(generated_dataset: Path):
+    customers = pl.read_parquet(generated_dataset / "customers.parquet")
+    instore_accounts = pl.read_parquet(generated_dataset / "instore_accounts.parquet")
+    orders_instore = pl.read_parquet(generated_dataset / "orders_instore.parquet")
+
+    assert {"phone_number", "email"}.issubset(set(instore_accounts.columns))
+    # POS tables do not natively store e-commerce customer_id UUIDs
+    assert instore_accounts["customer_id"].null_count() == instore_accounts.height
+    assert orders_instore["customer_id"].null_count() == orders_instore.height
+
+    # Every POS account must have at least one contact identifier (phone, email, or both)
+    phone_only = instore_accounts.filter(pl.col("phone_number").is_not_null() & pl.col("email").is_null()).height
+    email_only = instore_accounts.filter(pl.col("phone_number").is_null() & pl.col("email").is_not_null()).height
+    both = instore_accounts.filter(pl.col("phone_number").is_not_null() & pl.col("email").is_not_null()).height
+    assert phone_only + email_only + both == instore_accounts.height
+    assert phone_only > 0 and email_only > 0 and both > 0
+
+    # Verify both omnichannel-stitchable POS accounts and POS-only accounts exist
+    cust_emails = {e.strip().lower() for e in customers["email"].drop_nulls().to_list()}
+    cust_phones = {"".join(ch for ch in p if ch.isdigit())[-10:] for p in customers["phone"].drop_nulls().to_list()}
+
+    matched_accts: set[str] = set()
+    unmatched_accts: set[str] = set()
+    for row in instore_accounts.to_dicts():
+        em = row["email"].strip().lower() if row["email"] else None
+        ph = "".join(ch for ch in row["phone_number"] if ch.isdigit())[-10:] if row["phone_number"] else None
+        if (em and em in cust_emails) or (ph and ph in cust_phones):
+            matched_accts.add(row["instore_account_id"])
+        else:
+            unmatched_accts.add(row["instore_account_id"])
+
+    assert len(matched_accts) > 0
+    assert len(unmatched_accts) > 0
+
+    # POS-only accounts must actually transact in orders_instore (not dead rows)
+    tx_accts = set(orders_instore["instore_account_id"].drop_nulls().to_list())
+    assert len(tx_accts.intersection(unmatched_accts)) > 0
+    # Anonymous walk-in POS transactions must also exist
+    assert orders_instore["instore_account_id"].null_count() > 0
+    # Payment tokens should exist on card/mobile transactions across both channels
+    orders_online = pl.read_parquet(generated_dataset / "orders_online.parquet")
+    assert "payment_token" in orders_online.columns and "payment_token" in orders_instore.columns
+    assert orders_online["payment_token"].drop_nulls().len() > 0
+    assert orders_instore["payment_token"].drop_nulls().len() > 0
+
+    # BOPIS & BORIS + clickstream anonymous_id checks
+    assert "fulfillment_type" in orders_online.columns
+    assert "bopis" in set(orders_online["fulfillment_type"].to_list())
+    clickstream = pl.read_parquet(generated_dataset / "clickstream.parquet")
+    assert "anonymous_id" in clickstream.columns
+    assert clickstream["anonymous_id"].null_count() == 0
+    stores = pl.read_parquet(generated_dataset / "stores.parquet")
+    assert "country" in stores.columns

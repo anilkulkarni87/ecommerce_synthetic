@@ -260,6 +260,11 @@
           "nullable": false,
           "description": "Geographic region (Northeast, West, etc.)"
         },
+        "country": {
+          "type": "string",
+          "nullable": false,
+          "description": "ISO 3166-1 alpha-2 country code (e.g. US, GB, DE, JP)"
+        },
         "opened_date": {
           "type": "date",
           "nullable": false,
@@ -303,8 +308,15 @@
         },
         "phone_number": {
           "type": "string",
-          "nullable": false,
-          "description": "Phone number for identity resolution",
+          "nullable": true,
+          "description": "Phone number captured at POS (nullable; customer may provide phone, email, or both)",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
+        },
+        "email": {
+          "type": "string",
+          "nullable": true,
+          "description": "Email address captured at POS for digital receipts/rewards (nullable)",
           "pii_classification": "DIRECT_PII",
           "sensitivity": "HIGH"
         },
@@ -330,9 +342,10 @@
       "description": "E-commerce web checkout orders.",
       "primary_key": "order_id",
       "foreign_keys": {
-        "customer_id": "customers.customer_id",
+        "customer_id": "customers.customer_id (nullable)",
         "shipping_address_id": "addresses.address_id",
-        "billing_address_id": "addresses.address_id"
+        "billing_address_id": "addresses.address_id",
+        "pickup_store_id": "stores.store_id (nullable)"
       },
       "columns": {
         "order_id": {
@@ -342,8 +355,25 @@
         },
         "customer_id": {
           "type": "string (UUID)",
+          "nullable": true,
+          "description": "FK to customers (null for guest checkout)"
+        },
+        "guest_email": {
+          "type": "string",
+          "nullable": true,
+          "description": "Email captured at guest checkout when customer_id is null",
+          "pii_classification": "DIRECT_PII",
+          "sensitivity": "HIGH"
+        },
+        "fulfillment_type": {
+          "type": "string",
           "nullable": false,
-          "description": "FK to customers"
+          "description": "ship_to_home or bopis (Buy Online, Pick Up In Store)"
+        },
+        "pickup_store_id": {
+          "type": "string",
+          "nullable": true,
+          "description": "FK to stores for BOPIS pickup orders"
         },
         "order_date": {
           "type": "timestamp",
@@ -404,6 +434,13 @@
           "type": "string",
           "nullable": false,
           "description": "credit_card, debit_card, paypal, apple_pay, gift_card",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
+        "payment_token": {
+          "type": "string",
+          "nullable": true,
+          "description": "Tokenized card/wallet fingerprint for cross-channel attribution & fraud",
           "pii_classification": "FINANCIAL",
           "sensitivity": "MEDIUM"
         },
@@ -576,6 +613,13 @@
           "pii_classification": "FINANCIAL",
           "sensitivity": "MEDIUM"
         },
+        "payment_token": {
+          "type": "string",
+          "nullable": true,
+          "description": "Tokenized card/wallet fingerprint for repeat walk-in & cross-channel stitching",
+          "pii_classification": "FINANCIAL",
+          "sensitivity": "MEDIUM"
+        },
         "coupon_code": {
           "type": "string",
           "nullable": true,
@@ -673,6 +717,11 @@
           "type": "string (UUID)",
           "nullable": false,
           "description": "Session grouping key (stitches to orders_online.session_id)"
+        },
+        "anonymous_id": {
+          "type": "string (UUID)",
+          "nullable": false,
+          "description": "Persistent browser/device cookie ID for pre-login session stitching"
         },
         "customer_id": {
           "type": "string (UUID)",
@@ -1303,8 +1352,18 @@
         },
         "customer_id": {
           "type": "string (UUID)",
+          "nullable": true,
+          "description": "FK to customers (null for guest orders)"
+        },
+        "return_channel": {
+          "type": "string",
           "nullable": false,
-          "description": "FK to customers"
+          "description": "mail or instore (BORIS: Buy Online, Return In Store)"
+        },
+        "return_store_id": {
+          "type": "string",
+          "nullable": true,
+          "description": "FK to stores when returned in-store (BORIS)"
         },
         "return_reason": {
           "type": "string",
@@ -1422,32 +1481,42 @@
     "identity_ground_truth": {
       "file": "identity_ground_truth.parquet",
       "optional_flag": "--identity-noise",
-      "description": "Canonical entity-resolution ground truth mapping fragmented duplicate customer profiles back to their true_entity_id (generated when --identity-noise > 0).",
-      "primary_key": "customer_id",
+      "description": "Cross-channel entity-resolution ground truth mapping fragmented customers and decoupled instore_accounts back to their true_entity_id (generated when --identity-noise > 0).",
+      "primary_key": "true_entity_id",
       "foreign_keys": {
-        "customer_id": "customers.customer_id",
-        "true_entity_id": "customers.customer_id"
+        "customer_id": "customers.customer_id (nullable)",
+        "instore_account_id": "instore_accounts.instore_account_id (nullable)"
       },
       "columns": {
+        "record_type": {
+          "type": "string",
+          "nullable": false,
+          "description": "Source table type: customer or instore_account"
+        },
         "customer_id": {
           "type": "string (UUID)",
-          "nullable": false,
-          "description": "FK to customers (primary key)"
+          "nullable": true,
+          "description": "FK to customers when record_type is customer"
+        },
+        "instore_account_id": {
+          "type": "string (UUID)",
+          "nullable": true,
+          "description": "FK to instore_accounts when record_type is instore_account"
         },
         "true_entity_id": {
           "type": "string (UUID)",
           "nullable": false,
-          "description": "Canonical real-world person customer_id"
+          "description": "Canonical real-world person entity ID (customer_id or POS-only instore_account_id)"
         },
         "is_duplicate": {
           "type": "boolean",
           "nullable": false,
-          "description": "True if this row is an injected duplicate profile"
+          "description": "True if this row is an injected duplicate or cross-channel POS match"
         },
         "noise_type": {
           "type": "string",
           "nullable": false,
-          "description": "Mutation type: none, email_alias, phone_format, nickname_typo, household_split"
+          "description": "Mutation type: none, email_alias, phone_format, nickname_typo, household_split, temporal_pii_change, pos_cross_channel, pos_only"
         }
       }
     }

@@ -75,20 +75,33 @@ STREET_TEMPLATES = [
 ]
 
 
+# International store cities when multi-region is enabled
+INTL_STORE_LOCATIONS: dict[str, list[tuple[str, str, str]]] = {
+    "GB": [("London", "LDN", "SW1A 1AA"), ("Manchester", "MAN", "M1 1AE"), ("Birmingham", "BIR", "B1 1BB"), ("Edinburgh", "EDH", "EH1 1YZ")],
+    "DE": [("Berlin", "BE", "10115"), ("Munich", "BY", "80331"), ("Hamburg", "HH", "20095"), ("Frankfurt", "HE", "60311")],
+    "JP": [("Tokyo", "13", "100-0001"), ("Osaka", "27", "530-0001"), ("Yokohama", "14", "220-0001"), ("Kyoto", "26", "600-8001")],
+    "CA": [("Toronto", "ON", "M5V 2T6"), ("Vancouver", "BC", "V6B 1A1"), ("Montreal", "QC", "H3B 2Y5")],
+    "AU": [("Sydney", "NSW", "2000"), ("Melbourne", "VIC", "3000"), ("Brisbane", "QLD", "4000")],
+    "FR": [("Paris", "IDF", "75001"), ("Lyon", "ARA", "69001"), ("Marseille", "PAC", "13001")],
+    "IN": [("Mumbai", "MH", "400001"), ("Bengaluru", "KA", "560001"), ("Delhi", "DL", "110001")],
+}
+
+
 class StoreGenerator(BaseGenerator):
     """Generate physical store locations."""
 
     def generate(self, **deps) -> pl.DataFrame:
         n = self.config.store_count
         start_date = self.config.date_range.start
+        regions = getattr(self.config, "regions", ["US"]) or ["US"]
 
         records: list[dict] = []
 
-        # Flatten all locations
-        all_locations: list[tuple[str, str, str, str]] = []
+        # Flatten US locations
+        us_locations: list[tuple[str, str, str, str, str]] = []
         for region, cities in US_STORE_LOCATIONS.items():
             for city, state, zip_code in cities:
-                all_locations.append((city, state, zip_code, region))
+                us_locations.append((city, state, zip_code, region, "US"))
 
         # Assign store types
         store_type_list = []
@@ -103,8 +116,12 @@ class StoreGenerator(BaseGenerator):
         self.rng.shuffle(store_type_list)
 
         for i in range(n):
-            loc = all_locations[i % len(all_locations)]
-            city, state, zip_code, region = loc
+            country = regions[i % len(regions)]
+            if country != "US" and country in INTL_STORE_LOCATIONS:
+                city, state, zip_code = self.rng.choice(INTL_STORE_LOCATIONS[country])
+                region = country
+            else:
+                city, state, zip_code, region, country = us_locations[i % len(us_locations)]
             stype = store_type_list[i]
             sinfo = STORE_TYPES[stype]
 
@@ -137,6 +154,7 @@ class StoreGenerator(BaseGenerator):
                 "state": state,
                 "zip_code": zip_code,
                 "region": region,
+                "country": country,
                 "opened_date": opened,
                 "square_footage": sq_ft,
                 "employee_count": emp_count,

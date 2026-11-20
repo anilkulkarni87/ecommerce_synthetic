@@ -230,8 +230,9 @@ def validate(
         cust = get_table("customers")
         if ord_df is None or cust is None:
             return True, "skipped"
-        diff = set(ord_df["customer_id"].to_list()) - set(cust["customer_id"].to_list())
-        return len(diff) == 0, f"0 orphan customer_ids ({ord_df.height} orders checked)"
+        known = ord_df.filter(pl.col("customer_id").is_not_null())
+        diff = set(known["customer_id"].to_list()) - set(cust["customer_id"].to_list())
+        return len(diff) == 0, f"0 orphan customer_ids ({known.height} known / {ord_df.height} orders checked)"
     check("orders_online.customer_id -> customers.customer_id", check_orders_customer_fk)
 
     def check_orders_address_fk():

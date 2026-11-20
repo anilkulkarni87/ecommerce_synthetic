@@ -85,6 +85,58 @@ class Orchestrator:
             }, only
         )
 
+        # Extend identity_ground_truth with cross-channel POS accounts when --identity-noise > 0
+        if "identity_ground_truth" in self.data and "instore_accounts" in self.data:
+            gt_df = self.data["identity_ground_truth"]
+            ia_df = self.data["instore_accounts"]
+            instore_to_cust = ia_df.__dict__.get("_instore_to_customer", {})
+            cid_to_true = dict(zip(
+                gt_df["customer_id"].to_list(),
+                gt_df["true_entity_id"].to_list(),
+            ))
+            pos_gt_rows: list[dict] = []
+            for acct_id in ia_df["instore_account_id"].to_list():
+                linked_cid = instore_to_cust.get(acct_id)
+                if linked_cid:
+                    pos_gt_rows.append({
+                        "record_type": "instore_account",
+                        "customer_id": None,
+                        "instore_account_id": acct_id,
+                        "true_entity_id": cid_to_true.get(linked_cid, linked_cid),
+                        "is_duplicate": True,
+                        "noise_type": "pos_cross_channel",
+                    })
+                else:
+                    pos_gt_rows.append({
+                        "record_type": "instore_account",
+                        "customer_id": None,
+                        "instore_account_id": acct_id,
+                        "true_entity_id": acct_id,
+                        "is_duplicate": False,
+                        "noise_type": "pos_only",
+                    })
+            if pos_gt_rows:
+                pos_gt_df = pl.DataFrame(pos_gt_rows).cast({
+                    "record_type": pl.Utf8,
+                    "customer_id": pl.Utf8,
+                    "instore_account_id": pl.Utf8,
+                    "true_entity_id": pl.Utf8,
+                    "is_duplicate": pl.Boolean,
+                    "noise_type": pl.Utf8,
+                })
+                combined_gt = pl.concat([gt_df, pos_gt_df])
+                self.data["identity_ground_truth"] = combined_gt
+                if self.stream_exporter is None:
+                    gt_stats = write_parquet(
+                        combined_gt,
+                        self.config.output_dir,
+                        "identity_ground_truth.parquet",
+                        chunk_size=getattr(self.config, "chunk_size", None),
+                    )
+                    self.file_stats = [
+                        s for s in self.file_stats if s.get("table_name") != "identity_ground_truth"
+                    ] + [gt_stats]
+
         # 4b. Fulfillment & Inventory (shipments, returns, inventory_snapshots)
         self._generate_and_write(
             "fulfillment", FulfillmentGenerator, {
